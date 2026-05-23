@@ -126,6 +126,21 @@
                         box.style.display = "block";
                         // Esconde o alerta da tela após 5 segundos
                         setTimeout(() => { box.style.display = "none"; }, 5000);
+                    } else if (data.tipo === "like") {
+                        const box = document.getElementById('alerta-presente');
+                        document.getElementById('meme-texto').innerText = data.mensagem;
+
+                        // Aqui você pode colocar um GIF de coração piscando ou algo temático de dominó
+                        document.getElementById('meme-img').src = "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExbWZ6cXN4b3BxZndidm13ZzV5N3g0b3B6ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3RsaT0x/26hpKz7859EibAiB2/giphy.gif";
+
+                        // Aplica uma borda vermelha/rosa estilizada para diferenciar do presente
+                        box.style.borderColor = "#ff007f";
+
+                        box.style.display = "block";
+                        setTimeout(() => {
+                            box.style.display = "none";
+                            box.style.borderColor = "#4834d4"; // Reseta a borda padrão do presente
+                        }, 4000); // Fica 4 segundos na tela
                     }
                 }
             } catch (err) { }

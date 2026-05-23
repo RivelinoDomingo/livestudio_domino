@@ -8,7 +8,7 @@ import queue
 import time
 import argparse
 from TikTokLive import TikTokLiveClient
-from TikTokLive.events import CommentEvent, GiftEvent
+from TikTokLive.events import CommentEvent, GiftEvent, LikeEvent, ConnectEvent
 
 
 # Desativa os logs padrão de requisições do servidor Werkzeug (Flask)
@@ -17,25 +17,32 @@ log.setLevel(logging.ERROR)  # Só vai mostrar mensagens na tela se for um ERRO 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='App de leitura de mensagens e presentes de lives do tiktok')
-    parser.add_argument('user', default="rivellinodomingo", help='Nome do usuario, que voce quer monitorar a live.')
+    parser.add_argument('user', default='rivellinodomingo', help='Nome do usuario, que voce quer monitorar a live.')
     return parser.parse_args()
 
 app = Flask(__name__)
 
+# CONFIGURAÇÃO DO TIKTOK (Coloque o @ que você quer monitorar)
+TIKTOK_USERNAME = parse_arguments().user
+client = TikTokLiveClient(unique_id=TIKTOK_USERNAME)
+
 AUDIO_FILE = "resultado.wav"
+
 # Fila de eventos pendentes que a página web vai consumir e exibir na tela
 fila_alertas = []
 
 # Cria uma fila de mensagens segura para rodar entre Threads
 fila_processamento_tts = queue.PriorityQueue()
 
-# CONFIGURAÇÃO DO TIKTOK (Coloque o @ que você quer monitorar)
-TIKTOK_USERNAME = parse_arguments().user
-client = TikTokLiveClient(unique_id=TIKTOK_USERNAME)
-
 # Dicionário global para controlar os combos ativos
 # Estrutura: { "nome_usuario": {"presente": "Rose", "quantidade": 1, "ultimo_timestamp": 12345678} }
 combos_ativos = {}
+
+# Estrutura: { "nome_usuario": total_likes_na_live }
+likes_por_usuario = {}
+
+# Guarda os IDs das últimas 50 mensagens para evitar repetições do histórico inicial
+historico_mensagens_recentes = []
 
 # Tempo em segundos para esperar o combo terminar antes da IA falar
 TEMPO_ESPERA_COMBO = 4.0
@@ -73,11 +80,71 @@ def monitorar_e_enviar_combo(usuario):
             })
 
 # --- EVENTOS DO TIKTOK ---
+@client.on(ConnectEvent)
+async def on_connect(event: ConnectEvent):
+    print(f"\n=========================================")
+    print(f"✅ CONEXÃO ESTABELECIDA COM SUCESSO!")
+    print(f"🤖 Monitorando agora a live de: @{event.unique_id}")
+    print(f"=========================================\n")
+
+@client.on(LikeEvent)
+async def on_like(event: LikeEvent):
+    usuario = event.user.unique_id
+
+    try:
+        # Extrai o 'count' (quantidade de cliques do bloco atual) que você descobriu
+        likes_enviados = int(event.count) if hasattr(event, 'count') else 1
+
+        # Opcional: Se quiser capturar o total geral da live que você mencionou
+        total_da_live = int(event.total) if hasattr(event, 'total') else 0
+    except Exception:
+        likes_enviados = 1
+        total_da_live = 0
+
+    # Inicializa o usuário no dicionário caso seja a primeira vez dele curtindo
+    if usuario not in likes_por_usuario:
+        likes_por_usuario[usuario] = 0
+
+    # Guarda o valor antigo para sabermos quando ele cruzar a barreira dos 200
+    total_antigo = likes_por_usuario[usuario]
+    likes_por_usuario[usuario] += likes_enviados
+    total_atual = likes_por_usuario[usuario]
+
+    # Print discreto no terminal para você acompanhar os blocos chegando
+    print(f"❤️ {usuario} enviou um bloco de +{likes_enviados} curtidas! (Total dele: {total_atual} | Total da Live: {total_da_live})")
+
+    # Verifica se ele cruzou a barreira de mais uma centena dupla (200, 400, 600...)
+    if (total_atual // 200) > (total_antigo // 200):
+        marcador = (total_atual // 200) * 200
+
+        mensagem_likes = f"{usuario} enviou mais de {marcador} curtidas!"
+        print(f"❤️ Meta de Likes! {mensagem_likes}")
+
+        # Envia para a fila visual do HTML para piscar o banner na tela da live
+        fila_alertas.append({
+            "tipo": "like",
+            "reproduzir": True,
+            "mensagem": mensagem_likes
+        })
 
 @client.on(CommentEvent)
 async def on_comment(event: CommentEvent):
     usuario = event.user.unique_id
     mensagem = event.comment
+
+    # Cria uma chave única baseada em quem falou e o que falou
+    chave_mensagem = f"{usuario}:{mensagem}"
+
+    # Se essa exata mensagem desse mesmo usuário acabou de ser recebida, ignora o reenvio
+    if chave_mensagem in historico_mensagens_recentes:
+        return
+
+    # Adiciona ao histórico de controle
+    historico_mensagens_recentes.append(chave_mensagem)
+    # Mantém apenas as últimas 30 mensagens no histórico para não acumular memória
+    if len(historico_mensagens_recentes) > 30:
+        historico_mensagens_recentes.pop(0)
+
     print(f"[{usuario}]: {mensagem}")
 
     # Ignorar comandos ou mensagens excessivamente longas
@@ -86,16 +153,8 @@ async def on_comment(event: CommentEvent):
 
     texto_para_ia = f"{usuario} disse: {mensagem}"
 
+    # Envia para a fila de prioridades do seu PC (Prioridade 2 = Chat Normal)
     fila_processamento_tts.put((2, texto_para_ia))
-    # fila_alertas.append({"tipo": "tts", "reproduzir": True})
-
-    # try:
-    #     # Aciona o seu testar_voz.py passando o argumento
-    #     subprocess.run(['python3', 'testar_voz.py', texto_para_ia], check=True)
-    #     # Notifica a fila que o áudio do Kokoro está pronto para o HTML tocar
-    #     fila_alertas.append({"tipo": "tts", "reproduzir": True})
-    # except Exception as e:
-    #     print(f"Erro ao gerar voz do chat: {e}")
 
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
