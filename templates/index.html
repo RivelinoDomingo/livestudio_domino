@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Studio Domino - Overlay</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: transparent; /* Transparente para usar sobre o IPWebcam se quiser */
+            color: #e1e1e6;
+            margin: 0;
+            padding: 20px;
+            overflow: hidden;
+        }
+        /* Painel do Placar Automático */
+        .placar-container {
+            background-color: rgba(32, 32, 36, 0.9);
+            border-radius: 10px;
+            padding: 15px;
+            width: 320px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border-left: 5px solid #00b37e;
+        }
+        .placar-titulo {
+            color: #00b37e;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .jogador-linha {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 3px;
+        }
+        .detalhes-jogo {
+            font-size: 12px;
+            color: #8d8d99;
+        }
+        /* Caixa de Alerta de Presentes/Meme (Invisível por padrão) */
+        #alerta-presente {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 999;
+            border: 2px solid #4834d4;
+        }
+        #alerta-presente img { max-width: 200px; border-radius: 10px; }
+        .texto-alerta { font-size: 20px; color: #fff; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="placar-container">
+        <div class="placar-titulo">📯 Placar da Partida</div>
+        <div id="jogadores-lista">Carregando dados do Firebase...</div>
+    </div>
+
+    <div id="alerta-presente">
+        <img id="meme-img" src="" alt="Meme Alerta">
+        <div id="meme-texto" class="texto-alerta"></div>
+    </div>
+
+    <script>
+        // Elemento de áudio interno do navegador para reproduzir o Kokoro
+        let audioTTS = new Audio();
+
+        // FUNÇÃO A: Busca os dados do seu app de Dominó no Firebase e atualiza o HTML
+        async function puxarDadosFirebase() {
+            try {
+                const url = "https://firestore.googleapis.com/v1/projects/placar-domino/databases/(default)/documents/hardware/display";
+                const response = await fetch(url);
+                const data = await response.json();
+                const campos = data.fields;
+
+                let htmlGerado = "";
+                // Loop dinâmico para renderizar os 4 jogadores do JSON
+                for (let i = 1; i <= 4; i++) {
+                    const nome = campos[`nome${i}`]?.stringValue || `Jogador ${i}`;
+                    const pontos = campos[`jogador${i}`]?.integerValue || "0";
+                    const lambretas = campos[`lambretas${i}`]?.integerValue || "0";
+                    const raios = campos[`raios${i}`]?.integerValue || "0";
+
+                    htmlGerado += `
+                        <div class="jogador-linha">
+                            <span><strong>${nome}</strong></span>
+                            <span>${pontos} pts</span>
+                        </div>
+                        <div class="detalhes-jogo">⚡ Raios: ${raios} | 🛵 Lambretas: ${lambretas}</div>
+                    `;
+                }
+                document.getElementById('jogadores-lista').innerHTML = htmlGerado;
+            } catch (err) {
+                console.error("Erro ao ler Firebase:", err);
+            }
+        }
+
+        // FUNÇÃO B: Verifica com o back-end se há eventos pendentes (Polking de Alertas)
+        async function checarNovosAlertas() {
+            try {
+                const response = await fetch('/obter_alerta');
+                const data = await response.json();
+
+                if (data.reproduzir) {
+                    if (data.tipo === "tts") {
+                        // Toca a voz gerada pelo Kokoro
+                        audioTTS.src = "/audio?" + new Date().getTime();
+                        audioTTS.play();
+                    } else if (data.tipo === "gift") {
+                        // Exibe a animação/vídeo do presente na tela da live
+                        const box = document.getElementById('alerta-presente');
+                        document.getElementById('meme-texto').innerText = data.mensagem;
+                        document.getElementById('meme-img').src = "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExbW90Z3Y0Z3B0Zndidm13ZzV5N3g0b3B6Zndidm13ZzV5N3g0b3B6ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3RsaT0x/l3vRlTKuRxCwpntLM/giphy.gif"; // Exemplo de gif de festa, mude para o seu
+
+                        box.style.display = "block";
+                        // Esconde o alerta da tela após 5 segundos
+                        setTimeout(() => { box.style.display = "none"; }, 5000);
+                    }
+                }
+            } catch (err) { }
+        }
+
+        // Inicializa os loops de atualização automática da página
+        setInterval(puxarDadosFirebase, 4000); // Atualiza o placar a cada 4 segundos
+        setInterval(checarNovosAlertas, 1000);   // Verifica se o TikTok mandou algo a cada 1 segundo
+    </script>
+</body>
+</html>

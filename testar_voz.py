@@ -24,9 +24,9 @@ print("Gerando o áudio...")
 # Na v1.0, o método de criar mudou ligeiramente para facilitar o uso:
 samples, sample_rate = kokoro.create(
     text=texto,
-    voice="pf_dora",
+    voice="pm_santa",
     speed=1.0,
-    lang="pt"
+    lang="pt-br"
 )
 
 # Salva o resultado

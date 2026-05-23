@@ -1,168 +1,133 @@
-import subprocess
 import os
-from flask import Flask, render_template_string, request, jsonify, send_from_directory
+import asyncio
+import threading
+import subprocess
+from flask import Flask, render_template, jsonify, send_from_directory
+import logging
+import queue
+from TikTokLive import TikTokLiveClient
+from TikTokLive.events import CommentEvent, GiftEvent
+
+
+# Desativa os logs padrão de requisições do servidor Werkzeug (Flask)
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)  # Só vai mostrar mensagens na tela se for um ERRO crítico
+
 
 app = Flask(__name__)
 
-# Caminho para o arquivo de áudio gerado
 AUDIO_FILE = "resultado.wav"
+# Fila de eventos pendentes que a página web vai consumir e exibir na tela
+fila_alertas = []
 
-# Interface HTML minimalista e moderna integrada
-HTML_PAGE = """
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kokoro TTS Interface</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #121214;
-            color: #e1e1e6;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            background-color: #202024;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            width: 90%;
-            max-width: 500px;
-            text-align: center;
-        }
-        h1 { color: #00b37e; margin-bottom: 20px; font-size: 24px; }
-        textarea {
-            width: 100%;
-            height: 100px;
-            background-color: #121214;
-            border: 1px solid #29292e;
-            border-radius: 5px;
-            color: #fff;
-            padding: 10px;
-            box-sizing: border-box;
-            resize: none;
-            font-size: 16px;
-        }
-        textarea:focus { border-color: #00b37e; outline: none; }
-        button {
-            background-color: #00b37e;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            margin-top: 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: bold;
-            transition: background 0.2s;
-            width: 100%;
-        }
-        button:hover { background-color: #00875f; }
-        button:disabled { background-color: #4d4d4d; cursor: not-allowed; }
-        .audio-controls {
-            margin-top: 25px;
-            padding-top: 20px;
-            border-top: 1px solid #29292e;
-        }
-        .btn-play { background-color: #4834d4; }
-        .btn-play:hover { background-color: #686de0; }
-        #status { margin-top: 10px; color: #8d8d99; font-size: 14px; }
-    </style>
-</head>
-<body>
+# Cria uma fila de mensagens segura para rodar entre Threads
+fila_processamento_tts = queue.Queue()
 
-<div class="container">
-    <h1>Kokoro TTS</h1>
-    <textarea id="texto" placeholder="Digite o texto que a IA deve falar..."></textarea>
-    <button id="btnGerar" onclick="gerarAudio()">Gerar e Ouvir</button>
-    <div id="status"></div>
+# CONFIGURAÇÃO DO TIKTOK (Coloque o @ que você quer monitorar)
+TIKTOK_USERNAME = "tiagonoronha77"
+client = TikTokLiveClient(unique_id=TIKTOK_USERNAME)
 
-    <div class="audio-controls">
-        <button id="btnRepetir" class="btn-play" onclick="repetirAudio()" disabled>▶ Repetir Áudio Atual</button>
-    </div>
-</div>
+# --- EVENTOS DO TIKTOK ---
 
-<script>
-    // Elemento de áudio global que guarda o arquivo na memória do navegador
-    let audio = new Audio();
+@client.on(CommentEvent)
+async def on_comment(event: CommentEvent):
+    usuario = event.user.unique_id
+    mensagem = event.comment
+    print(f"[{usuario}]: {mensagem}")
 
-    async function gerarAudio() {
-        const texto = document.getElementById('texto').value;
-        const btnGerar = document.getElementById('btnGerar');
-        const btnRepetir = document.getElementById('btnRepetir');
-        const status = document.getElementById('status');
+    # Ignorar comandos ou mensagens excessivamente longas
+    if len(mensagem) > 100 or mensagem.startswith("!"):
+        return
 
-        if (!texto.trim()) {
-            alert("Por favor, digite algum texto.");
-            return;
-        }
+    texto_para_ia = f"{usuario} disse: {mensagem}"
 
-        btnGerar.disabled = true;
-        status.innerText = "Processando voz com Kokoro v1.0...";
+    fila_processamento_tts.put(texto_para_ia)
+    # fila_alertas.append({"tipo": "tts", "reproduzir": True})
 
-        try {
-            const response = await fetch('/falar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `texto=${encodeURIComponent(texto)}`
-            });
-            
-            const data = await response.json();
-            
-            if (data.sucesso) {
-                status.innerText = "Áudio gerado com sucesso!";
-                // Adiciona um timestamp (?t=...) para burlar o cache do navegador e forçar o som novo
-                audio.src = "/audio?" + new Date().getTime();
-                audio.play();
-                btnRepetir.disabled = false;
-            } else {
-                status.innerText = "Erro: " + data.erro;
-            }
-        } catch (err) {
-            status.innerText = "Erro ao se comunicar com o servidor.";
-        } finally {
-            btnGerar.disabled = false;
-        }
-    }
+    # try:
+    #     # Aciona o seu testar_voz.py passando o argumento
+    #     subprocess.run(['python3', 'testar_voz.py', texto_para_ia], check=True)
+    #     # Notifica a fila que o áudio do Kokoro está pronto para o HTML tocar
+    #     fila_alertas.append({"tipo": "tts", "reproduzir": True})
+    # except Exception as e:
+    #     print(f"Erro ao gerar voz do chat: {e}")
 
-    function repetirAudio() {
-        audio.play();
-    }
-</script>
+@client.on(GiftEvent)
+async def on_gift(event: GiftEvent):
+    usuario = event.user.unique_id
+    presente = event.gift.name
+    print(f"🎁 {usuario} enviou um {presente}!")
 
-</body>
-</html>
-"""
+    # Exemplo de lógica personalizada de gatilho de mimos
+    mensagem_alerta = f"Obrigado pelo {presente}, {usuario}!"
+    fila_processamento_tts.put(mensagem_alerta)
+
+    # Adiciona na fila para o HTML piscar o gif/vídeo na tela
+    fila_alertas.append({
+        "tipo": "gift",
+        "reproduzir": True,
+        "mensagem": mensagem_alerta
+    })
+
+# --- CONFIGURAÇÃO DA THREAD DO TIKTOK ---
+def rodar_tiktok():
+    """Função rodada em uma thread separada para escutar o TikTok continuamente"""
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    try:
+        print(f"🤖 Linha do TikTok ativada para: @{TIKTOK_USERNAME}")
+        client.run()
+    except Exception as e:
+        print(f"Conexão do TikTok encerrada ou indisponível: {e}")
+
+def processador_de_audio():
+    """Esta função roda em uma Thread própria, isolada, pegando os textos
+    da fila um por um e gerando o áudio no tempo dele, sem travar o TikTok."""
+    while True:
+        # Pega o próximo texto da fila (fica bloqueado esperando se estiver vazia)
+        texto_para_ia = fila_processamento_tts.get()
+
+        print(f"⚙️ Processando áudio agora: '{texto_para_ia}'")
+        try:
+            # Executa o Kokoro. O PC fraco vai demorar o tempo que precisar aqui...
+            subprocess.run(['python3', 'testar_voz.py', texto_para_ia], check=True)
+
+            # SÓ DEPOIS QUE GRAVOU COM SUCESSO: Avisa o HTML para dar o Play!
+            fila_alertas.append({"tipo": "tts", "reproduzir": True})
+            print(f"✅ Áudio pronto e enviado para o navegador!")
+
+        except Exception as e:
+            print(f"❌ Erro ao processar o áudio na Thread: {e}")
+
+        # Informa que terminou aquela tarefa
+        fila_processamento_tts.task_done()
+
+# --- ROTAS DO FLASK (INTERFACE WEB) ---
 
 @app.route('/')
 def index():
-    return render_template_string(HTML_PAGE)
+    # Renderiza automaticamente o arquivo 'templates/index.html'
+    return render_template('index.html')
 
-@app.route('/falar', methods=['POST'])
-def falar():
-    texto = request.form.get('texto', '')
-    
-    try:
-        # Executa o seu arquivo testar_voz.py passando o texto recebido como argumento
-        # Usamos o python3 do próprio ambiente virtual
-        resultado = subprocess.run(
-            ['python3', 'testar_voz.py', texto],
-            capture_output=True, text=True, check=True
-        )
-        return jsonify({"sucesso": True})
-    except subprocess.CalledProcessError as e:
-        return jsonify({"sucesso": False, "erro": e.stderr or str(e)})
+@app.route('/obter_alerta')
+def obter_alerta():
+    """A página web consulta essa rota a cada segundo procurando novas interações"""
+    if fila_alertas:
+        return jsonify(fila_alertas.pop(0)) # Remove e entrega o primeiro alerta da fila
+    return jsonify({"reproduzir": False})
 
 @app.route('/audio')
 def obter_audio():
-    # Serve o arquivo .wav gerado para que a página possa reproduzir
     return send_from_directory(os.getcwd(), AUDIO_FILE)
 
 if __name__ == '__main__':
-    # Roda o servidor localmente na porta 5000
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # 1. Thread 1: Escuta o TikTok
+    thread_tiktok = threading.Thread(target=rodar_tiktok, daemon=True)
+    thread_tiktok.start()
+
+    # 2. Thread 2: Processa o Kokoro de forma isolada (NOVO)
+    thread_audio = threading.Thread(target=processador_de_audio, daemon=True)
+    thread_audio.start()
+
+    # 3. Inicia o Flask
+    print("🚀 Servidor da Live iniciado em http://localhost:5000")
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
