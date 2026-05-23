@@ -5,6 +5,8 @@ import subprocess
 from flask import Flask, render_template, jsonify, send_from_directory
 import logging
 import queue
+import time
+import argparse
 from TikTokLive import TikTokLiveClient
 from TikTokLive.events import CommentEvent, GiftEvent
 
@@ -13,6 +15,10 @@ from TikTokLive.events import CommentEvent, GiftEvent
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)  # Só vai mostrar mensagens na tela se for um ERRO crítico
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='App de leitura de mensagens e presentes de lives do tiktok')
+    parser.add_argument('user', default="rivellinodomingo", help='Nome do usuario, que voce quer monitorar a live.')
+    return parser.parse_args()
 
 app = Flask(__name__)
 
@@ -21,11 +27,50 @@ AUDIO_FILE = "resultado.wav"
 fila_alertas = []
 
 # Cria uma fila de mensagens segura para rodar entre Threads
-fila_processamento_tts = queue.Queue()
+fila_processamento_tts = queue.PriorityQueue()
 
 # CONFIGURAÇÃO DO TIKTOK (Coloque o @ que você quer monitorar)
-TIKTOK_USERNAME = "tiagonoronha77"
+TIKTOK_USERNAME = parse_arguments().user
 client = TikTokLiveClient(unique_id=TIKTOK_USERNAME)
+
+# Dicionário global para controlar os combos ativos
+# Estrutura: { "nome_usuario": {"presente": "Rose", "quantidade": 1, "ultimo_timestamp": 12345678} }
+combos_ativos = {}
+
+# Tempo em segundos para esperar o combo terminar antes da IA falar
+TEMPO_ESPERA_COMBO = 4.0
+
+def monitorar_e_enviar_combo(usuario):
+    """Aguarda o tempo de espera terminar para verificar se o combo fechou,
+    e então envia um único agradecimento para a fila da IA."""
+    time.sleep(TEMPO_ESPERA_COMBO)
+
+    if usuario in combos_ativos:
+        dados = combos_ativos[usuario]
+        agora = time.time()
+
+        # Se já se passaram X segundos desde o ÚLTIMO presente enviado por ele, o combo fechou!
+        if agora - dados["ultimo_timestamp"] >= TEMPO_ESPERA_COMBO:
+            # Remove do dicionário de ativos para poder aceitar novos combos no futuro
+            combos_ativos.pop(usuario)
+
+            # Monta a frase baseada na quantidade
+            if dados["quantidade"] > 1:
+                mensagem_alerta = f"Obrigado pelo combo de {dados['quantidade']} {dados['presente']}s, {usuario}!"
+            else:
+                mensagem_alerta = f"Obrigado pelo {dados['presente']}, {usuario}!"
+
+            print(f"🎁 Combo Fechado! Enviando para a IA: {mensagem_alerta}")
+
+            # Envia para a fila do Kokoro com Prioridade 1 (Máxima)
+            fila_processamento_tts.put((1, mensagem_alerta))
+
+            # Alerta o HTML imediatamente para piscar o visual na tela (opcional)
+            fila_alertas.append({
+                "tipo": "gift",
+                "reproduzir": True,
+                "mensagem": mensagem_alerta
+            })
 
 # --- EVENTOS DO TIKTOK ---
 
@@ -41,7 +86,7 @@ async def on_comment(event: CommentEvent):
 
     texto_para_ia = f"{usuario} disse: {mensagem}"
 
-    fila_processamento_tts.put(texto_para_ia)
+    fila_processamento_tts.put((2, texto_para_ia))
     # fila_alertas.append({"tipo": "tts", "reproduzir": True})
 
     # try:
@@ -56,18 +101,29 @@ async def on_comment(event: CommentEvent):
 async def on_gift(event: GiftEvent):
     usuario = event.user.unique_id
     presente = event.gift.name
-    print(f"🎁 {usuario} enviou um {presente}!")
 
-    # Exemplo de lógica personalizada de gatilho de mimos
-    mensagem_alerta = f"Obrigado pelo {presente}, {usuario}!"
-    fila_processamento_tts.put(mensagem_alerta)
+    # O TikTokLive costuma enviar a contagem acumulada no próprio evento (event.gift.combo_count)
+    # Mas como alguns presentes de clique único não acumulam nativamente, nosso script gerencia de forma manual e segura:
+    agora = time.time()
 
-    # Adiciona na fila para o HTML piscar o gif/vídeo na tela
-    fila_alertas.append({
-        "tipo": "gift",
-        "reproduzir": True,
-        "mensagem": mensagem_alerta
-    })
+    if usuario in combos_ativos and combos_ativos[usuario]["presente"] == presente:
+        # Se o usuário já estava em combo com esse mesmo presente, apenas incrementa e atualiza o tempo
+        combos_ativos[usuario]["quantidade"] += 1
+        combos_ativos[usuario]["ultimo_timestamp"] = agora
+        print(f"➕ [+1 no Combo] {usuario} está combando {presente}! Total atual: {combos_ativos[usuario]['quantidade']}")
+    else:
+        # Se é o primeiro presente ou um presente diferente, inicia um novo monitoramento
+        combos_ativos[usuario] = {
+            "presente": presente,
+            "quantidade": 1,
+            "ultimo_timestamp": agora
+        }
+        print(f"🎁 [Novo Combo Iniciado] {usuario} enviou um {presente}.")
+
+        # Dispara uma Thread temporária em background para esperar o combo terminar
+        # sem congelar a recepção de novos presentes da live
+        threading.Thread(target=monitorar_e_enviar_combo, args=(usuario,), daemon=True).start()
+
 
 # --- CONFIGURAÇÃO DA THREAD DO TIKTOK ---
 def rodar_tiktok():
@@ -80,25 +136,27 @@ def rodar_tiktok():
         print(f"Conexão do TikTok encerrada ou indisponível: {e}")
 
 def processador_de_audio():
-    """Esta função roda em uma Thread própria, isolada, pegando os textos
-    da fila um por um e gerando o áudio no tempo dele, sem travar o TikTok."""
     while True:
-        # Pega o próximo texto da fila (fica bloqueado esperando se estiver vazia)
-        texto_para_ia = fila_processamento_tts.get()
+        # Agora recebemos a prioridade e o texto da tupla
+        prioridade, texto_para_ia = fila_processamento_tts.get()
 
-        print(f"⚙️ Processando áudio agora: '{texto_para_ia}'")
+        tempo_start = time.time()
+
+        # Um aviso no terminal para você ver a prioridade funcionando
+        status_prio = "⚡ PRESENTE" if prioridade == 1 else "💬 CHAT"
+        print(f"⚙️ [{status_prio}] Processando áudio agora: '{texto_para_ia}'")
+
         try:
-            # Executa o Kokoro. O PC fraco vai demorar o tempo que precisar aqui...
+            # Executa o Kokoro passando o texto
             subprocess.run(['python3', 'testar_voz.py', texto_para_ia], check=True)
 
-            # SÓ DEPOIS QUE GRAVOU COM SUCESSO: Avisa o HTML para dar o Play!
+            # Alerta o HTML para tocar
             fila_alertas.append({"tipo": "tts", "reproduzir": True})
-            print(f"✅ Áudio pronto e enviado para o navegador!")
+            print(f"✅ Áudio procesado em {time.time() - tempo_start} segundos... Enviado para o navegador!")
 
         except Exception as e:
             print(f"❌ Erro ao processar o áudio na Thread: {e}")
 
-        # Informa que terminou aquela tarefa
         fila_processamento_tts.task_done()
 
 # --- ROTAS DO FLASK (INTERFACE WEB) ---
