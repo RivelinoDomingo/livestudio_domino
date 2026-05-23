@@ -68,7 +68,16 @@
     </div>
 
     <div id="alerta-presente">
-        <img id="meme-img" src="" alt="Meme Alerta">
+        <video id="meme-video" width="300" muted playsinline>
+            <source id="meme-src" src="" type="video/mp4">
+        </video>
+        <div id="meme-texto" class="texto-alerta"></div>
+    </div>
+
+    <div id="alerta-like">
+        <video id="meme-video" width="300" muted playsinline>
+            <source id="meme-src" src="" type="video/mp4">
+        </video>
         <div id="meme-texto" class="texto-alerta"></div>
     </div>
 
@@ -127,20 +136,29 @@
                         // Esconde o alerta da tela após 5 segundos
                         setTimeout(() => { box.style.display = "none"; }, 5000);
                     } else if (data.tipo === "like") {
-                        const box = document.getElementById('alerta-presente');
+                        const box = document.getElementById('alerta-like');
+                        const video = document.getElementById('meme-video');
+                        const videoSource = document.getElementById('meme-src');
+
                         document.getElementById('meme-texto').innerText = data.mensagem;
 
-                        // Aqui você pode colocar um GIF de coração piscando ou algo temático de dominó
-                        document.getElementById('meme-img').src = "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExbWZ6cXN4b3BxZndidm13ZzV5N3g0b3B6ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3RsaT0x/26hpKz7859EibAiB2/giphy.gif";
+                        // Define o caminho do seu vídeo mp4
+                        videoSource.src = "/static/DInovo.mp4"; // Se estiver na pasta static (Recomendado)
+                        // Se o vídeo estiver na raiz do projeto junto com o app.py, use apenas: videoSource.src = "DInovo.mp4";
 
-                        // Aplica uma borda vermelha/rosa estilizada para diferenciar do presente
-                        box.style.borderColor = "#ff007f";
-
+                        box.style.borderColor = "#ff007f"; // Borda rosa/vermelha para curtidas
                         box.style.display = "block";
+
+                        // Recarrega o vídeo com o novo arquivo e dá o Play automático
+                        video.load();
+                        video.play().catch(e => console.log("Erro ao reproduzir vídeo:", e));
+
+                        // Esconde tudo após 4 segundos
                         setTimeout(() => {
                             box.style.display = "none";
-                            box.style.borderColor = "#4834d4"; // Reseta a borda padrão do presente
-                        }, 4000); // Fica 4 segundos na tela
+                            video.pause(); // Pausa o vídeo para não gastar CPU em background
+                            box.style.borderColor = "#4834d4";
+                        }, 4000);
                     }
                 }
             } catch (err) { }
