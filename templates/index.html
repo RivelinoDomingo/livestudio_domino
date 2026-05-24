@@ -2,15 +2,14 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- CHAVE: Travar o browser em portrait SEMPRE, independente do sensor -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Live Studio Domino - Overlay</title>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="display" content="fullscreen">
     <link rel="manifest" href="/static/manifest.json">
 
     <style>
-        /* CSS RESET para garantir que o celular use 100% da tela sem barras de rolagem */
         * {
             box-sizing: border-box;
             margin: 0;
@@ -22,30 +21,81 @@
             background-color: #000;
             color: #e1e1e6;
             overflow: hidden;
+            /* Em portrait: width=altura-física, height=largura-física do celular deitado */
             width: 100vw;
             height: 100vh;
             position: relative;
         }
 
-        /* --- CAMADA 1 (FUNDO): CÂMERA EM TELA CHEIA REAL --- */
+        /*
+         * CÂMERA:
+         * O celular está FISICAMENTE deitado (landscape), mas o browser está em portrait.
+         * O stream da câmera chega em landscape (correto!).
+         * Precisamos rotacionar o <video> 90° para ele ficar de pé visualmente,
+         * e depois escalar para preencher a tela sem barras pretas.
+         *
+         * Matemática:
+         *   - Em portrait: viewport = W x H (ex: 390 x 844)
+         *   - Vídeo landscape: resolução = H x W (ex: 844 x 390 — câmera deitada)
+         *   - Após rotate(90deg): o vídeo ocupa W x H visualmente... MAS o elemento
+         *     ainda tem dimensões H x W no DOM, então precisamos transladar também.
+         *   - A escala para preencher sem corte: scale = H / W (altura / largura do viewport)
+         *     Isso estica o vídeo (que virou "estreito" após rotacionar) para encher a tela.
+         */
         #webcam-fundo {
             position: absolute;
-            top: 0;
-            left: 0;
+            /* Centraliza para a transformação girar em torno do centro da tela */
+            top: 50%;
+            left: 50%;
+            /* Dimensões = tamanho do viewport em portrait */
             width: 100vw;
             height: 100vh;
-            object-fit: cover;
+            /* object-fit contain: sem corte, sem zoom artificial. A câmera já está landscape,
+               o stream já tem a proporção certa. */
+            object-fit: contain;
             background-color: #000;
             z-index: 1;
-            transition: transform 0.3s ease;
+            /*
+             * 1. translate(-50%,-50%): ancora o centro do vídeo no centro da tela
+             * 2. rotate(90deg): gira o stream para ficar na orientação correta
+             * 3. scaleY(var(--escala-video)): estica verticalmente (eixo Y após rotação
+             *    = eixo X original) para preencher a largura da tela sem barras pretas
+             *    Calculado via JS: window.innerHeight / window.innerWidth
+             */
+            transform: translate(-50%, -50%) rotate(90deg) scaleY(var(--escala-video, 1));
+            transform-origin: center center;
         }
 
-        /* --- CAMADA 2: CONTROLES RETRÁTEIS (MENU FLUTUANTE) --- */
+        /*
+         * OVERLAY (placar + botões):
+         * Tudo que está no overlay deve aparecer na orientação CORRETA para quem
+         * olha o celular deitado. Então rotacionamos o container do overlay -90°
+         * (sentido contrário) e ajustamos as dimensões para ele ocupar a tela inteira
+         * na orientação landscape percebida.
+         */
+        #overlay-rotacionado {
+            position: absolute;
+            /* Centra para a rotação ocorrer ao redor do centro */
+            top: 50%;
+            left: 50%;
+            /*
+             * Após girar -90°, largura e altura trocam de lugar do ponto de vista do usuário.
+             * Setamos width=100vh e height=100vw para o container "landscape" preencher tudo.
+             */
+            width: 100vh;
+            height: 100vw;
+            transform: translate(-50%, -50%) rotate(-90deg);
+            transform-origin: center center;
+            z-index: 50;
+            /* Posicionamento interno como se fosse landscape */
+            position: absolute;
+        }
+
+        /* --- MENU FLUTUANTE --- */
         .menu-container {
             position: absolute;
             top: 15px;
             right: 15px;
-            z-index: 100;
             display: flex;
             flex-direction: column;
             align-items: flex-end;
@@ -65,11 +115,10 @@
             align-items: center;
             justify-content: center;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            transition: transform 0.2s ease;
         }
 
         .painel-controles {
-            display: none; /* Escondido por padrão */
+            display: none;
             flex-direction: column;
             background: rgba(18, 18, 20, 0.95);
             backdrop-filter: blur(5px);
@@ -92,7 +141,7 @@
             white-space: nowrap;
         }
 
-        /* --- CAMADA 3: PLACAR FLUTUANTE ULTRA COMPACTO --- */
+        /* --- PLACAR --- */
         .placar-container {
             position: absolute;
             top: 15px;
@@ -102,10 +151,9 @@
             -webkit-backdrop-filter: blur(5px);
             border-radius: 10px;
             padding: 12px;
-            width: 180px; /* Mais estreito horizontalmente */
+            width: 180px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
             border-left: 5px solid #00b37e;
-            z-index: 50;
         }
 
         .placar-titulo {
@@ -147,7 +195,6 @@
             white-space: nowrap;
         }
 
-        /* Indicadores de Pontos (Retângulos Inclinados) */
         .pontos-container {
             display: flex;
             gap: 4px;
@@ -156,14 +203,14 @@
         .bloco-ponto {
             width: 14px;
             height: 10px;
-            background-color: #2e2e35; /* Cor padrão: Desativado */
-            transform: skewX(-15deg); /* Inclinação moderna */
+            background-color: #2e2e35;
+            transform: skewX(-15deg);
             border-radius: 1px;
             transition: background-color 0.3s ease, box-shadow 0.3s ease;
         }
 
         .bloco-ponto.ativo {
-            background-color: #ffca28; /* Amarelo ouro ao pontuar */
+            background-color: #ffca28;
             box-shadow: 0 0 8px rgba(255, 202, 40, 0.6);
         }
 
@@ -173,7 +220,7 @@
             margin-top: 2px;
         }
 
-        /* --- CAMADA 4: POPUPS DE ALERTAS --- */
+        /* --- ALERTAS --- */
         .caixa-alerta {
             display: none;
             position: absolute;
@@ -188,6 +235,7 @@
             border: 3px solid #4834d4;
             box-shadow: 0 0 30px rgba(0,0,0,0.9);
         }
+
         .texto-alerta {
             font-size: 22px;
             color: #fff;
@@ -199,47 +247,62 @@
 </head>
 <body>
 
-    <div class="menu-container">
-        <button class="botao-menu-principal" onclick="alternarMenuControles()">⚙️</button>
-        <div id="menu-paineis" class="painel-controles">
-            <button onclick="alternarCamera()" style="background: #00b37e;">🎥 Alternar Câmera</button>
-            <button onclick="rotacionarCamera()" style="background: #4834d4;">🔄 Girar 90°</button>
-            <button onclick="ativarTelaCheia()" style="background: #ff9f43;">📺 Tela Cheia</button>
-        </div>
-    </div>
-
+    <!-- CÂMERA: fora do overlay, rotacionada separadamente -->
     <video id="webcam-fundo" autoplay playsinline></video>
 
-    <div class="placar-container">
-        <div class="placar-titulo">📯 Placar da Partida</div>
-        <div id="jogadores-lista">Carregando dados...</div>
-    </div>
+    <!-- TUDO do overlay dentro deste container que gira -90° -->
+    <div id="overlay-rotacionado">
 
-    <div id="alerta-presente" class="caixa-alerta">
-        <video id="meme-video" width="320" playsinline>
-            <source id="meme-src" src="" type="video/mp4">
-        </video>
-        <div id="meme-texto" class="texto-alerta"></div>
-    </div>
+        <div class="menu-container">
+            <button class="botao-menu-principal" onclick="alternarMenuControles()">⚙️</button>
+            <div id="menu-paineis" class="painel-controles">
+                <button onclick="alternarCamera()" style="background: #00b37e;">🎥 Alternar Câmera</button>
+                <button onclick="ativarTelaCheia()" style="background: #ff9f43;">📺 Tela Cheia</button>
+            </div>
+        </div>
 
-    <div id="alerta-like" class="caixa-alerta">
-        <video id="meme-like-video" width="320" playsinline>
-            <source id="meme-like-src" src="" type="video/mp4">
-        </video>
-        <div id="meme-like-texto" class="texto-alerta"></div>
-    </div>
+        <div class="placar-container">
+            <div class="placar-titulo">📯 Placar da Partida</div>
+            <div id="jogadores-lista">Carregando dados...</div>
+        </div>
+
+        <div id="alerta-presente" class="caixa-alerta">
+            <video id="meme-video" width="320" playsinline>
+                <source id="meme-src" src="" type="video/mp4">
+            </video>
+            <div id="meme-texto" class="texto-alerta"></div>
+        </div>
+
+        <div id="alerta-like" class="caixa-alerta">
+            <video id="meme-like-video" width="320" playsinline>
+                <source id="meme-like-src" src="" type="video/mp4">
+            </video>
+            <div id="meme-like-texto" class="texto-alerta"></div>
+        </div>
+
+    </div><!-- fim #overlay-rotacionado -->
 
     <script>
         let audioTTS = new Audio();
         let streamAtual = null;
         let posicaoCamera = "environment";
-        let anguloManual = 0;
+
+        // Calcula e aplica a escala correta para o vídeo preencher a tela sem barras pretas
+        function calcularEscalaVideo() {
+            // Em portrait: vw < vh. A câmera vem em landscape (proporção invertida).
+            // Após rotate(90deg), o vídeo "estreito" (altura da tela) precisa se esticar
+            // para cobrir a "largura" da tela. A escala necessária = altura / largura.
+            const escala = window.innerHeight / window.innerWidth;
+            document.documentElement.style.setProperty('--escala-video', escala);
+        }
 
         async function iniciarCamera() {
             if (streamAtual) {
                 streamAtual.getTracks().forEach(track => track.stop());
             }
             try {
+                // Pedimos landscape explicitamente: a câmera traseira em modo landscape
+                // já captura na proporção 16:9 ideal para este overlay
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
                         facingMode: posicaoCamera,
@@ -249,54 +312,21 @@
                     audio: false
                 });
                 streamAtual = stream;
-                const videoFundo = document.getElementById('webcam-fundo');
-                videoFundo.srcObject = stream;
-                ajustarOrientacaoVideo();
+                document.getElementById('webcam-fundo').srcObject = stream;
+                // Recalcula a escala ao iniciar (garante que o CSS var está correto)
+                calcularEscalaVideo();
             } catch (err) {
                 console.error("Erro na webcam:", err);
-                if(posicaoCamera === "environment") {
+                if (posicaoCamera === "environment") {
                     posicaoCamera = "user";
                     iniciarCamera();
                 }
             }
         }
 
-        function ajustarOrientacaoVideo() {
-            const videoFundo = document.getElementById('webcam-fundo');
-            if (!videoFundo) return;
-
-            const anguloDispositivo = window.orientation || 0;
-            let anguloFinal = (anguloManual - anguloDispositivo) % 360;
-            if (anguloFinal < 0) anguloFinal += 360;
-
-            videoFundo.style.width = "100vw";
-            videoFundo.style.height = "100vh";
-            videoFundo.style.transformOrigin = "50% 50%";
-
-            let espelhamento = (posicaoCamera === "user") ? "scaleX(-1) " : "";
-
-            if (anguloFinal === 90 || anguloFinal === 270) {
-                const largura = window.innerWidth;
-                const altura = window.innerHeight;
-                const deslocamentoX = (largura - altura) / 2;
-                const deslocamentoY = (altura - largura) / 2;
-
-                videoFundo.style.transform = `translate(${deslocamentoX}px, ${deslocamentoY}px) ${espelhamento}rotate(${anguloFinal}deg)`;
-                videoFundo.style.width = "100vh";
-                videoFundo.style.height = "100vw";
-            } else {
-                videoFundo.style.transform = `${espelhamento}rotate(${anguloFinal}deg)`;
-            }
-        }
-
-        // Função para abrir e fechar o menu de controles
         function alternarMenuControles() {
             const painel = document.getElementById('menu-paineis');
-            if (painel.style.display === "flex") {
-                painel.style.display = "none";
-            } else {
-                painel.style.display = "flex";
-            }
+            painel.style.display = painel.style.display === "flex" ? "none" : "flex";
         }
 
         function alternarCamera() {
@@ -304,49 +334,26 @@
             iniciarCamera();
         }
 
-        function rotacionarCamera() {
-            anguloManual = (anguloManual + 90) % 360;
-            ajustarOrientacaoVideo();
-        }
-
-        window.addEventListener("orientationchange", () => {
-            setTimeout(ajustarOrientacaoVideo, 200);
-        });
-
-        document.addEventListener("fullscreenchange", ajustarOrientacaoVideo);
-        document.addEventListener("webkitfullscreenchange", ajustarOrientacaoVideo);
-        document.addEventListener("mozfullscreenchange", ajustarOrientacaoVideo);
-        document.addEventListener("MSFullscreenChange", ajustarOrientacaoVideo);
-
         function ativarTelaCheia() {
-            const elemento = document.documentElement;
+            const el = document.documentElement;
             if (!document.fullscreenElement) {
-                if (elemento.requestFullscreen) elemento.requestFullscreen();
-                else if (elemento.mozRequestFullScreen) elemento.mozRequestFullScreen();
-                else if (elemento.webkitRequestFullscreen) elemento.webkitRequestFullscreen();
-                else if (elemento.msRequestFullscreen) elemento.msRequestFullscreen();
+                (el.requestFullscreen || el.mozRequestFullScreen || el.webkitRequestFullscreen || el.msRequestFullscreen).call(el);
             } else {
-                if (document.exitFullscreen) document.exitFullscreen();
+                (document.exitFullscreen || document.webkitExitFullscreen).call(document);
             }
-            // TRUQUE AQUI: Aguarda 300ms (tempo da animação do Android) e recalcula a câmera
-            setTimeout(ajustarOrientacaoVideo, 300);
+            setTimeout(calcularEscalaVideo, 350);
         }
 
-        // Gera a barra de 4 blocos visuais dependendo da quantidade de pontos do Firebase
-        function gerarBlocosPontos(pontos) {
-            let blocosHtml = '<div class="pontos-container">';
-            // Garante que o número fica entre 0 e 4
-            const qtdAtivos = Math.min(Math.max(parseInt(pontos) || 0, 0), 4);
+        // Recalcula se a janela mudar de tamanho (ex: barra do browser aparecer/sumir)
+        window.addEventListener('resize', calcularEscalaVideo);
 
+        function gerarBlocosPontos(pontos) {
+            let html = '<div class="pontos-container">';
+            const qtd = Math.min(Math.max(parseInt(pontos) || 0, 0), 4);
             for (let i = 1; i <= 4; i++) {
-                if (i <= qtdAtivos) {
-                    blocosHtml += '<div class="bloco-ponto ativo"></div>';
-                } else {
-                    blocosHtml += '<div class="bloco-ponto"></div>';
-                }
+                html += `<div class="bloco-ponto ${i <= qtd ? 'ativo' : ''}"></div>`;
             }
-            blocosHtml += '</div>';
-            return blocosHtml;
+            return html + '</div>';
         }
 
         async function puxarDadosFirebase() {
@@ -355,14 +362,12 @@
                 const response = await fetch(url);
                 const data = await response.json();
                 const campos = data.fields;
-
                 let htmlGerado = "";
                 for (let i = 1; i <= 4; i++) {
                     const nome = campos[`nome${i}`]?.stringValue || `Jogador ${i}`;
                     const points = parseInt(campos[`jogador${i}`]?.integerValue) || 0;
                     const lambretas = campos[`lambretas${i}`]?.integerValue || "0";
                     const raios = campos[`raios${i}`]?.integerValue || "0";
-
                     htmlGerado += `
                         <div class="jogador-item">
                             <div class="jogador-linha">
@@ -370,8 +375,7 @@
                                 ${gerarBlocosPontos(points)}
                             </div>
                             <div class="detalhes-jogo">⚡ R: ${raios} | 🛵 L: ${lambretas}</div>
-                        </div>
-                    `;
+                        </div>`;
                 }
                 document.getElementById('jogadores-lista').innerHTML = htmlGerado;
             } catch (err) {
@@ -383,55 +387,37 @@
             try {
                 const response = await fetch('/obter_alerta');
                 const data = await response.json();
-
                 if (data.reproduzir) {
                     if (data.tipo === "tts") {
                         audioTTS.src = "/audio?" + new Date().getTime();
                         audioTTS.play();
-                    }
-                    else if (data.tipo === "gift") {
+                    } else if (data.tipo === "gift") {
                         const box = document.getElementById('alerta-presente');
                         const video = document.getElementById('meme-video');
-                        const videoSource = document.getElementById('meme-src');
-
+                        document.getElementById('meme-src').src = "/static/EH_Nois.mp4";
                         document.getElementById('meme-texto').innerText = data.mensagem;
-                        videoSource.src = "/static/EH_Nois.mp4";
-
                         box.style.borderColor = "#ff9f43";
                         box.style.display = "block";
-
                         video.load();
-                        video.play().catch(e => console.log("Erro no vídeo:", e));
-
-                        setTimeout(() => {
-                            box.style.display = "none";
-                            video.pause();
-                        }, 10000);
-                    }
-                    else if (data.tipo === "like") {
+                        video.play().catch(e => console.log(e));
+                        setTimeout(() => { box.style.display = "none"; video.pause(); }, 10000);
+                    } else if (data.tipo === "like") {
                         const box = document.getElementById('alerta-like');
                         const video = document.getElementById('meme-like-video');
-                        const videoSource = document.getElementById('meme-like-src');
-
-                        document.getElementById('alerta-like').querySelector('.texto-alerta').innerText = data.mensagem;
-                        videoSource.src = "/static/DInovo.mp4";
-
+                        document.getElementById('meme-like-src').src = "/static/DInovo.mp4";
+                        document.getElementById('meme-like-texto').innerText = data.mensagem;
                         box.style.borderColor = "#ff007f";
                         box.style.display = "block";
-
                         video.load();
-                        video.play().catch(e => console.log("Erro no vídeo:", e));
-
-                        setTimeout(() => {
-                            box.style.display = "none";
-                            video.pause();
-                        }, 13000);
+                        video.play().catch(e => console.log(e));
+                        setTimeout(() => { box.style.display = "none"; video.pause(); }, 13000);
                     }
                 }
-            } catch (err) { }
+            } catch (err) {}
         }
 
         window.onload = () => {
+            calcularEscalaVideo();
             iniciarCamera();
             setInterval(puxarDadosFirebase, 4000);
             setInterval(checarNovosAlertas, 1000);

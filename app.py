@@ -189,7 +189,7 @@ async def on_gift(event: GiftEvent):
 def processar_alerta_presente(mensagem_alerta):
     """Função auxiliar para centralizar os envios sem repetir código"""
     global contador_ordem_chegada
-    print(f"🎁 Presente Confirmado! Enviando para a IA: {mensagem_alerta} -- {tim}")
+    print(f"🎁 Presente Confirmado! Enviando para a IA: {mensagem_alerta}")
 
     contador_ordem_chegada += 1
     # Envia para a fila do Kokoro com Prioridade 1 (Máxima)
