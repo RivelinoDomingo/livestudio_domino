@@ -16,10 +16,10 @@
             margin: 0;
             padding: 0;
         }
-        
+
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
-            background-color: #000; 
+            background-color: #000;
             color: #e1e1e6;
             overflow: hidden;
             width: 100vw;
@@ -27,84 +27,150 @@
             position: relative;
         }
 
-        /* --- CAMADA 1 (FUNDO): AJUSTE DA WEBCAM SEM SUPER-ZOOM --- */
-                /* --- CAMADA 1 (FUNDO): CÂMERA EM TELA CHEIA REAL --- */
+        /* --- CAMADA 1 (FUNDO): CÂMERA EM TELA CHEIA REAL --- */
         #webcam-fundo {
             position: absolute;
             top: 0;
             left: 0;
-            width: 100vw;   /* Força ocupar toda a largura do navegador */
-            height: 100vh;  /* Força ocupar toda a altura do navegador */
-            object-fit: cover; /* Estica eliminando as barras pretas laterais */
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
             background-color: #000;
             z-index: 1;
             transition: transform 0.3s ease;
         }
-        /* --- CAMADA 2: CONTROLES DA CÂMERA EM CIMA --- */
-        .painel-controles {
-            position: absolute; 
-            top: 15px; 
-            right: 15px; 
-            z-index: 100; /* Garante que fica clicável acima do vídeo */
-            background: rgba(0, 0, 0, 0.75); 
-            padding: 8px; 
-            border-radius: 8px;
+
+        /* --- CAMADA 2: CONTROLES RETRÁTEIS (MENU FLUTUANTE) --- */
+        .menu-container {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 100;
             display: flex;
-            gap: 5px;
-        }
-        .painel-controles button {
-            padding: 6px 12px; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 13px;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
         }
 
-        /* --- CAMADA 3: PLACAR FLUTUANTE COM DESTAQUE --- */
+        .botao-menu-principal {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(18, 18, 20, 0.9);
+            border: 2px solid #00b37e;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: transform 0.2s ease;
+        }
+
+        .painel-controles {
+            display: none; /* Escondido por padrão */
+            flex-direction: column;
+            background: rgba(18, 18, 20, 0.95);
+            backdrop-filter: blur(5px);
+            padding: 10px;
+            border-radius: 8px;
+            gap: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .painel-controles button {
+            padding: 8px 14px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        /* --- CAMADA 3: PLACAR FLUTUANTE ULTRA COMPACTO --- */
         .placar-container {
             position: absolute;
             top: 15px;
             left: 15px;
-            /* Fundo escuro com opacidade maior e desfoque tipo vidro (backdrop-filter) */
-            background-color: rgba(18, 18, 20, 0.85);
+            background-color: rgba(18, 18, 20, 0.15);
             backdrop-filter: blur(5px);
             -webkit-backdrop-filter: blur(5px);
             border-radius: 10px;
-            padding: 15px;
-            width: 280px;
+            padding: 12px;
+            width: 180px; /* Mais estreito horizontalmente */
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
             border-left: 5px solid #00b37e;
-            z-index: 50; /* Flutua acima do vídeo */
+            z-index: 50;
         }
-        
+
         .placar-titulo {
             color: #00b37e;
-            font-size: 16px;
+            font-size: 13px;
             font-weight: bold;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             text-transform: uppercase;
             letter-spacing: 1px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 5px;
+            padding-bottom: 3px;
         }
-        
+
+        .jogador-item {
+            margin-bottom: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            padding-bottom: 4px;
+        }
+
+        .jogador-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
         .jogador-linha {
             display: flex;
             justify-content: space-between;
-            margin-top: 8px;
-            font-size: 16px;
+            align-items: center;
+            font-size: 14px;
             font-weight: bold;
-            /* Cor branca forte para dar total destaque aos nomes no fundo escuro */
-            color: #ffffff; 
+            color: #ffffff;
         }
-        
+
+        .jogador-nome {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Indicadores de Pontos (Retângulos Inclinados) */
+        .pontos-container {
+            display: flex;
+            gap: 4px;
+        }
+
+        .bloco-ponto {
+            width: 14px;
+            height: 10px;
+            background-color: #2e2e35; /* Cor padrão: Desativado */
+            transform: skewX(-15deg); /* Inclinação moderna */
+            border-radius: 1px;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .bloco-ponto.ativo {
+            background-color: #ffca28; /* Amarelo ouro ao pontuar */
+            box-shadow: 0 0 8px rgba(255, 202, 40, 0.6);
+        }
+
         .detalhes-jogo {
-            font-size: 12px;
-            color: #c4c4cc; /* Cinza claro bem mais legível */
-            margin-bottom: 8px;
-            padding-bottom: 4px;
+            font-size: 11px;
+            color: #a8a8b3;
+            margin-top: 2px;
         }
 
         /* --- CAMADA 4: POPUPS DE ALERTAS --- */
@@ -118,25 +184,28 @@
             padding: 20px;
             border-radius: 15px;
             text-align: center;
-            z-index: 500; /* No topo absoluto */
+            z-index: 500;
             border: 3px solid #4834d4;
             box-shadow: 0 0 30px rgba(0,0,0,0.9);
         }
-        .texto-alerta { 
-            font-size: 22px; 
-            color: #fff; 
-            margin-top: 10px; 
-            font-weight: bold; 
+        .texto-alerta {
+            font-size: 22px;
+            color: #fff;
+            margin-top: 10px;
+            font-weight: bold;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
     </style>
 </head>
 <body>
 
-    <div class="painel-controles">
-        <button onclick="alternarCamera()" style="background: #00b37e;">🎥 Alternar Câmera</button>
-        <button onclick="rotacionarCamera()" style="background: #4834d4;">🔄 Girar 90°</button>
-        <button onclick="ativarTelaCheia()" style="background: #ff9f43;">📺 Tela Cheia</button>
+    <div class="menu-container">
+        <button class="botao-menu-principal" onclick="alternarMenuControles()">⚙️</button>
+        <div id="menu-paineis" class="painel-controles">
+            <button onclick="alternarCamera()" style="background: #00b37e;">🎥 Alternar Câmera</button>
+            <button onclick="rotacionarCamera()" style="background: #4834d4;">🔄 Girar 90°</button>
+            <button onclick="ativarTelaCheia()" style="background: #ff9f43;">📺 Tela Cheia</button>
+        </div>
     </div>
 
     <video id="webcam-fundo" autoplay playsinline></video>
@@ -163,31 +232,28 @@
     <script>
         let audioTTS = new Audio();
         let streamAtual = null;
-        let posicaoCamera = "environment"; // "environment" = Traseira, "user" = Frontal
-        let anguloRotacao = 0;
+        let posicaoCamera = "environment";
+        let anguloManual = 0;
 
         async function iniciarCamera() {
             if (streamAtual) {
                 streamAtual.getTracks().forEach(track => track.stop());
             }
-
             try {
-                const restricoes = { 
-                    video: { 
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
                         facingMode: posicaoCamera,
-                        width: { ideal: 1280 }, 
-                        height: { ideal: 720 } 
-                    }, 
-                    audio: false 
-                };
-
-                const stream = await navigator.mediaDevices.getUserMedia(restricoes);
-                const videoFundo = document.getElementById('webcam-fundo');
-                
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                });
                 streamAtual = stream;
+                const videoFundo = document.getElementById('webcam-fundo');
                 videoFundo.srcObject = stream;
+                ajustarOrientacaoVideo();
             } catch (err) {
-                console.error("Erro ao acessar a Webcam: ", err);
+                console.error("Erro na webcam:", err);
                 if(posicaoCamera === "environment") {
                     posicaoCamera = "user";
                     iniciarCamera();
@@ -195,25 +261,41 @@
             }
         }
 
-        function ativarTelaCheia() {
-            const elemento = document.documentElement; // Pega a página inteira
+        function ajustarOrientacaoVideo() {
+            const videoFundo = document.getElementById('webcam-fundo');
+            if (!videoFundo) return;
 
-            if (!document.fullscreenElement) {
-                // Força entrar em tela cheia sumindo com todas as barras do Android
-                if (elemento.requestFullscreen) {
-                    elemento.requestFullscreen();
-                } else if (elemento.mozRequestFullScreen) { // Especial para o Firefox antigo/específico
-                    elemento.mozRequestFullScreen();
-                } else if (elemento.webkitRequestFullscreen) {
-                    elemento.webkitRequestFullscreen();
-                } else if (elemento.msRequestFullscreen) {
-                    elemento.msRequestFullscreen();
-                }
+            const anguloDispositivo = window.orientation || 0;
+            let anguloFinal = (anguloManual - anguloDispositivo) % 360;
+            if (anguloFinal < 0) anguloFinal += 360;
+
+            videoFundo.style.width = "100vw";
+            videoFundo.style.height = "100vh";
+            videoFundo.style.transformOrigin = "50% 50%";
+
+            let espelhamento = (posicaoCamera === "user") ? "scaleX(-1) " : "";
+
+            if (anguloFinal === 90 || anguloFinal === 270) {
+                const largura = window.innerWidth;
+                const altura = window.innerHeight;
+                const deslocamentoX = (largura - altura) / 2;
+                const deslocamentoY = (altura - largura) / 2;
+
+                videoFundo.style.transform = `translate(${deslocamentoX}px, ${deslocamentoY}px) ${espelhamento}rotate(${anguloFinal}deg)`;
+                videoFundo.style.width = "100vh";
+                videoFundo.style.height = "100vw";
             } else {
-                // Se clicar de novo, ele sai do modo tela cheia
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                }
+                videoFundo.style.transform = `${espelhamento}rotate(${anguloFinal}deg)`;
+            }
+        }
+
+        // Função para abrir e fechar o menu de controles
+        function alternarMenuControles() {
+            const painel = document.getElementById('menu-paineis');
+            if (painel.style.display === "flex") {
+                painel.style.display = "none";
+            } else {
+                painel.style.display = "flex";
             }
         }
 
@@ -223,14 +305,48 @@
         }
 
         function rotacionarCamera() {
-            const videoFundo = document.getElementById('webcam-fundo');
-            anguloRotacao = (anguloRotacao + 90) % 360;
-            
-            if (posicaoCamera === "user") {
-                videoFundo.style.transform = `scaleX(-1) rotate(${anguloRotacao}deg)`;
+            anguloManual = (anguloManual + 90) % 360;
+            ajustarOrientacaoVideo();
+        }
+
+        window.addEventListener("orientationchange", () => {
+            setTimeout(ajustarOrientacaoVideo, 200);
+        });
+
+        document.addEventListener("fullscreenchange", ajustarOrientacaoVideo);
+        document.addEventListener("webkitfullscreenchange", ajustarOrientacaoVideo);
+        document.addEventListener("mozfullscreenchange", ajustarOrientacaoVideo);
+        document.addEventListener("MSFullscreenChange", ajustarOrientacaoVideo);
+
+        function ativarTelaCheia() {
+            const elemento = document.documentElement;
+            if (!document.fullscreenElement) {
+                if (elemento.requestFullscreen) elemento.requestFullscreen();
+                else if (elemento.mozRequestFullScreen) elemento.mozRequestFullScreen();
+                else if (elemento.webkitRequestFullscreen) elemento.webkitRequestFullscreen();
+                else if (elemento.msRequestFullscreen) elemento.msRequestFullscreen();
             } else {
-                videoFundo.style.transform = `rotate(${anguloRotacao}deg)`;
+                if (document.exitFullscreen) document.exitFullscreen();
             }
+            // TRUQUE AQUI: Aguarda 300ms (tempo da animação do Android) e recalcula a câmera
+            setTimeout(ajustarOrientacaoVideo, 300);
+        }
+
+        // Gera a barra de 4 blocos visuais dependendo da quantidade de pontos do Firebase
+        function gerarBlocosPontos(pontos) {
+            let blocosHtml = '<div class="pontos-container">';
+            // Garante que o número fica entre 0 e 4
+            const qtdAtivos = Math.min(Math.max(parseInt(pontos) || 0, 0), 4);
+
+            for (let i = 1; i <= 4; i++) {
+                if (i <= qtdAtivos) {
+                    blocosHtml += '<div class="bloco-ponto ativo"></div>';
+                } else {
+                    blocosHtml += '<div class="bloco-ponto"></div>';
+                }
+            }
+            blocosHtml += '</div>';
+            return blocosHtml;
         }
 
         async function puxarDadosFirebase() {
@@ -243,16 +359,18 @@
                 let htmlGerado = "";
                 for (let i = 1; i <= 4; i++) {
                     const nome = campos[`nome${i}`]?.stringValue || `Jogador ${i}`;
-                    const points = campos[`jogador${i}`]?.integerValue || "0";
+                    const points = parseInt(campos[`jogador${i}`]?.integerValue) || 0;
                     const lambretas = campos[`lambretas${i}`]?.integerValue || "0";
                     const raios = campos[`raios${i}`]?.integerValue || "0";
 
                     htmlGerado += `
-                        <div class="jogador-linha">
-                            <span><strong>${nome}</strong></span>
-                            <span>${points} pts</span>
+                        <div class="jogador-item">
+                            <div class="jogador-linha">
+                                <span class="jogador-nome"><strong>${nome}</strong></span>
+                                ${gerarBlocosPontos(points)}
+                            </div>
+                            <div class="detalhes-jogo">⚡ R: ${raios} | 🛵 L: ${lambretas}</div>
                         </div>
-                        <div class="detalhes-jogo">⚡ Raios: ${raios} | 🛵 Lambretas: ${lambretas}</div>
                     `;
                 }
                 document.getElementById('jogadores-lista').innerHTML = htmlGerado;
@@ -270,7 +388,7 @@
                     if (data.tipo === "tts") {
                         audioTTS.src = "/audio?" + new Date().getTime();
                         audioTTS.play();
-                    } 
+                    }
                     else if (data.tipo === "gift") {
                         const box = document.getElementById('alerta-presente');
                         const video = document.getElementById('meme-video');
@@ -289,17 +407,13 @@
                             box.style.display = "none";
                             video.pause();
                         }, 10000);
-                    } 
+                    }
                     else if (data.tipo === "like") {
                         const box = document.getElementById('alerta-like');
                         const video = document.getElementById('meme-like-video');
                         const videoSource = document.getElementById('meme-like-src');
 
-                        // CORREÇÃO 1: Usando o ID geral 'meme-texto' que está dentro de #alerta-like no seu HTML
                         document.getElementById('alerta-like').querySelector('.texto-alerta').innerText = data.mensagem;
-                        videoSource.src = "/static/DInovo.mp4";
-
-                        
                         videoSource.src = "/static/DInovo.mp4";
 
                         box.style.borderColor = "#ff007f";
