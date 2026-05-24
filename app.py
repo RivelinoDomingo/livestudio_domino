@@ -111,7 +111,7 @@ async def on_like(event: LikeEvent):
     total_atual = likes_por_usuario[usuario]
 
     # Print discreto no terminal para você acompanhar os blocos chegando
-    print(f"❤️ {usuario} enviou um bloco de +{likes_enviados} curtidas! (Total dele: {total_atual} | Total da Live: {total_da_live})")
+    # print(f"❤️ {usuario} enviou um bloco de +{likes_enviados} curtidas! (Total dele: {total_atual} | Total da Live: {total_da_live})")
 
     # Verifica se ele cruzou a barreira de mais uma centena dupla (200, 400, 600...)
     if (total_atual // 200) > (total_antigo // 200):

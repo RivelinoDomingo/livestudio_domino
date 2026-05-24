@@ -4,48 +4,113 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live Studio Domino - Overlay</title>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="display" content="fullscreen">
+    <link rel="manifest" href="/static/manifest.json">
+
     <style>
+        /* CSS RESET para garantir que o celular use 100% da tela sem barras de rolagem */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
-            background-color: transparent; /* Transparente para usar sobre o IPWebcam se quiser */
+            background-color: #000; 
             color: #e1e1e6;
-            margin: 0;
-            padding: 20px;
             overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            position: relative;
         }
-        /* Painel do Placar Automático */
+
+        /* --- CAMADA 1 (FUNDO): AJUSTE DA WEBCAM SEM SUPER-ZOOM --- */
+                /* --- CAMADA 1 (FUNDO): CÂMERA EM TELA CHEIA REAL --- */
+        #webcam-fundo {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;   /* Força ocupar toda a largura do navegador */
+            height: 100vh;  /* Força ocupar toda a altura do navegador */
+            object-fit: cover; /* Estica eliminando as barras pretas laterais */
+            background-color: #000;
+            z-index: 1;
+            transition: transform 0.3s ease;
+        }
+        /* --- CAMADA 2: CONTROLES DA CÂMERA EM CIMA --- */
+        .painel-controles {
+            position: absolute; 
+            top: 15px; 
+            right: 15px; 
+            z-index: 100; /* Garante que fica clicável acima do vídeo */
+            background: rgba(0, 0, 0, 0.75); 
+            padding: 8px; 
+            border-radius: 8px;
+            display: flex;
+            gap: 5px;
+        }
+        .painel-controles button {
+            padding: 6px 12px; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        /* --- CAMADA 3: PLACAR FLUTUANTE COM DESTAQUE --- */
         .placar-container {
-            background-color: rgba(32, 32, 36, 0.9);
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            /* Fundo escuro com opacidade maior e desfoque tipo vidro (backdrop-filter) */
+            background-color: rgba(18, 18, 20, 0.85);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
             border-radius: 10px;
             padding: 15px;
-            width: 320px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            width: 280px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
             border-left: 5px solid #00b37e;
+            z-index: 50; /* Flutua acima do vídeo */
         }
+        
         .placar-titulo {
             color: #00b37e;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
             text-transform: uppercase;
             letter-spacing: 1px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 5px;
         }
+        
         .jogador-linha {
             display: flex;
             justify-content: space-between;
-            margin: 5px 0;
+            margin-top: 8px;
             font-size: 16px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            padding-bottom: 3px;
+            font-weight: bold;
+            /* Cor branca forte para dar total destaque aos nomes no fundo escuro */
+            color: #ffffff; 
         }
+        
         .detalhes-jogo {
             font-size: 12px;
-            color: #8d8d99;
+            color: #c4c4cc; /* Cinza claro bem mais legível */
+            margin-bottom: 8px;
+            padding-bottom: 4px;
         }
-        /* Caixa de Alerta de Presentes/Meme (Invisível por padrão) */
-        #alerta-presente {
+
+        /* --- CAMADA 4: POPUPS DE ALERTAS --- */
+        .caixa-alerta {
             display: none;
-            position: fixed;
+            position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
@@ -53,39 +118,98 @@
             padding: 20px;
             border-radius: 15px;
             text-align: center;
-            z-index: 999;
-            border: 2px solid #4834d4;
+            z-index: 500; /* No topo absoluto */
+            border: 3px solid #4834d4;
+            box-shadow: 0 0 30px rgba(0,0,0,0.9);
         }
-        #alerta-presente img { max-width: 200px; border-radius: 10px; }
-        .texto-alerta { font-size: 20px; color: #fff; margin-top: 10px; font-weight: bold; }
+        .texto-alerta { 
+            font-size: 22px; 
+            color: #fff; 
+            margin-top: 10px; 
+            font-weight: bold; 
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
     </style>
 </head>
 <body>
 
+    <div class="painel-controles">
+        <button onclick="alternarCamera()" style="background: #00b37e;">🎥 Alternar Câmera</button>
+        <button onclick="rotacionarCamera()" style="background: #4834d4;">🔄 Girar 90°</button>
+    </div>
+
+    <video id="webcam-fundo" autoplay playsinline></video>
+
     <div class="placar-container">
         <div class="placar-titulo">📯 Placar da Partida</div>
-        <div id="jogadores-lista">Carregando dados do Firebase...</div>
+        <div id="jogadores-lista">Carregando dados...</div>
     </div>
 
-    <div id="alerta-presente">
-        <video id="meme-video" width="300" muted playsinline>
+    <div id="alerta-presente" class="caixa-alerta">
+        <video id="meme-video" width="320" playsinline>
             <source id="meme-src" src="" type="video/mp4">
         </video>
         <div id="meme-texto" class="texto-alerta"></div>
     </div>
 
-    <div id="alerta-like">
-        <video id="meme-video" width="300" muted playsinline>
-            <source id="meme-src" src="" type="video/mp4">
+    <div id="alerta-like" class="caixa-alerta">
+        <video id="meme-like-video" width="320" playsinline>
+            <source id="meme-like-src" src="" type="video/mp4">
         </video>
-        <div id="meme-texto" class="texto-alerta"></div>
+        <div id="meme-like-texto" class="texto-alerta"></div>
     </div>
 
     <script>
-        // Elemento de áudio interno do navegador para reproduzir o Kokoro
         let audioTTS = new Audio();
+        let streamAtual = null;
+        let posicaoCamera = "environment"; // "environment" = Traseira, "user" = Frontal
+        let anguloRotacao = 0;
 
-        // FUNÇÃO A: Busca os dados do seu app de Dominó no Firebase e atualiza o HTML
+        async function iniciarCamera() {
+            if (streamAtual) {
+                streamAtual.getTracks().forEach(track => track.stop());
+            }
+
+            try {
+                const restricoes = { 
+                    video: { 
+                        facingMode: posicaoCamera,
+                        width: { ideal: 1280 }, 
+                        height: { ideal: 720 } 
+                    }, 
+                    audio: false 
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(restricoes);
+                const videoFundo = document.getElementById('webcam-fundo');
+                
+                streamAtual = stream;
+                videoFundo.srcObject = stream;
+            } catch (err) {
+                console.error("Erro ao acessar a Webcam: ", err);
+                if(posicaoCamera === "environment") {
+                    posicaoCamera = "user";
+                    iniciarCamera();
+                }
+            }
+        }
+
+        function alternarCamera() {
+            posicaoCamera = (posicaoCamera === "user") ? "environment" : "user";
+            iniciarCamera();
+        }
+
+        function rotacionarCamera() {
+            const videoFundo = document.getElementById('webcam-fundo');
+            anguloRotacao = (anguloRotacao + 90) % 360;
+            
+            if (posicaoCamera === "user") {
+                videoFundo.style.transform = `scaleX(-1) rotate(${anguloRotacao}deg)`;
+            } else {
+                videoFundo.style.transform = `rotate(${anguloRotacao}deg)`;
+            }
+        }
+
         async function puxarDadosFirebase() {
             try {
                 const url = "https://firestore.googleapis.com/v1/projects/placar-domino/databases/(default)/documents/hardware/display";
@@ -94,17 +218,16 @@
                 const campos = data.fields;
 
                 let htmlGerado = "";
-                // Loop dinâmico para renderizar os 4 jogadores do JSON
                 for (let i = 1; i <= 4; i++) {
                     const nome = campos[`nome${i}`]?.stringValue || `Jogador ${i}`;
-                    const pontos = campos[`jogador${i}`]?.integerValue || "0";
+                    const points = campos[`jogador${i}`]?.integerValue || "0";
                     const lambretas = campos[`lambretas${i}`]?.integerValue || "0";
                     const raios = campos[`raios${i}`]?.integerValue || "0";
 
                     htmlGerado += `
                         <div class="jogador-linha">
                             <span><strong>${nome}</strong></span>
-                            <span>${pontos} pts</span>
+                            <span>${points} pts</span>
                         </div>
                         <div class="detalhes-jogo">⚡ Raios: ${raios} | 🛵 Lambretas: ${lambretas}</div>
                     `;
@@ -115,7 +238,6 @@
             }
         }
 
-        // FUNÇÃO B: Verifica com o back-end se há eventos pendentes (Polking de Alertas)
         async function checarNovosAlertas() {
             try {
                 const response = await fetch('/obter_alerta');
@@ -123,50 +245,60 @@
 
                 if (data.reproduzir) {
                     if (data.tipo === "tts") {
-                        // Toca a voz gerada pelo Kokoro
                         audioTTS.src = "/audio?" + new Date().getTime();
                         audioTTS.play();
-                    } else if (data.tipo === "gift") {
-                        // Exibe a animação/vídeo do presente na tela da live
+                    } 
+                    else if (data.tipo === "gift") {
                         const box = document.getElementById('alerta-presente');
-                        document.getElementById('meme-texto').innerText = data.mensagem;
-                        document.getElementById('meme-img').src = "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExbW90Z3Y0Z3B0Zndidm13ZzV5N3g0b3B6Zndidm13ZzV5N3g0b3B6ZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3RsaT0x/l3vRlTKuRxCwpntLM/giphy.gif"; // Exemplo de gif de festa, mude para o seu
-
-                        box.style.display = "block";
-                        // Esconde o alerta da tela após 5 segundos
-                        setTimeout(() => { box.style.display = "none"; }, 5000);
-                    } else if (data.tipo === "like") {
-                        const box = document.getElementById('alerta-like');
                         const video = document.getElementById('meme-video');
                         const videoSource = document.getElementById('meme-src');
 
                         document.getElementById('meme-texto').innerText = data.mensagem;
+                        videoSource.src = "/static/EH_Nois.mp4";
 
-                        // Define o caminho do seu vídeo mp4
-                        videoSource.src = "/static/DInovo.mp4"; // Se estiver na pasta static (Recomendado)
-                        // Se o vídeo estiver na raiz do projeto junto com o app.py, use apenas: videoSource.src = "DInovo.mp4";
-
-                        box.style.borderColor = "#ff007f"; // Borda rosa/vermelha para curtidas
+                        box.style.borderColor = "#ff9f43";
                         box.style.display = "block";
 
-                        // Recarrega o vídeo com o novo arquivo e dá o Play automático
                         video.load();
-                        video.play().catch(e => console.log("Erro ao reproduzir vídeo:", e));
+                        video.play().catch(e => console.log("Erro no vídeo:", e));
 
-                        // Esconde tudo após 4 segundos
                         setTimeout(() => {
                             box.style.display = "none";
-                            video.pause(); // Pausa o vídeo para não gastar CPU em background
-                            box.style.borderColor = "#4834d4";
-                        }, 4000);
+                            video.pause();
+                        }, 10000);
+                    } 
+                    else if (data.tipo === "like") {
+                        const box = document.getElementById('alerta-like');
+                        const video = document.getElementById('meme-like-video');
+                        const videoSource = document.getElementById('meme-like-src');
+
+                        // CORREÇÃO 1: Usando o ID geral 'meme-texto' que está dentro de #alerta-like no seu HTML
+                        document.getElementById('alerta-like').querySelector('.texto-alerta').innerText = data.mensagem;
+                        videoSource.src = "/static/DInovo.mp4";
+
+                        
+                        videoSource.src = "/static/DInovo.mp4";
+
+                        box.style.borderColor = "#ff007f";
+                        box.style.display = "block";
+
+                        video.load();
+                        video.play().catch(e => console.log("Erro no vídeo:", e));
+
+                        setTimeout(() => {
+                            box.style.display = "none";
+                            video.pause();
+                        }, 10000);
                     }
                 }
             } catch (err) { }
         }
 
-        // Inicializa os loops de atualização automática da página
-        setInterval(puxarDadosFirebase, 4000); // Atualiza o placar a cada 4 segundos
-        setInterval(checarNovosAlertas, 1000);   // Verifica se o TikTok mandou algo a cada 1 segundo
+        window.onload = () => {
+            iniciarCamera();
+            setInterval(puxarDadosFirebase, 4000);
+            setInterval(checarNovosAlertas, 1000);
+        };
     </script>
 </body>
 </html>

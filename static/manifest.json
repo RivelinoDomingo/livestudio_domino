@@ -1,0 +1,17 @@
+{
+  "short_name": "DominoLive",
+  "name": "Live Studio Domino Overlay",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/806/806131.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#000000",
+  "theme_color": "#00b37e",
+  "display": "fullscreen",
+  "orientation": "landscape"
+}
+
