@@ -6,6 +6,8 @@ from flask import Flask, render_template, jsonify, send_from_directory
 import logging
 import queue
 import time
+import sys
+import signal
 import argparse
 from TikTokLive import TikTokLiveClient
 from TikTokLive.events import CommentEvent, GiftEvent, LikeEvent, ConnectEvent
@@ -17,7 +19,8 @@ log.setLevel(logging.ERROR)  # Só vai mostrar mensagens na tela se for um ERRO 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='App de leitura de mensagens e presentes de lives do tiktok')
-    parser.add_argument('user', default='rivellinodomingo', help='Nome do usuario, que voce quer monitorar a live.')
+    # O nargs='?' diz ao Python que o argumento é opcional
+    parser.add_argument('user', type=str, nargs='?', default='rivellinodomingo', help='Nome do usuario, que voce quer monitorar a live.')
     return parser.parse_args()
 
 app = Flask(__name__)
@@ -26,6 +29,8 @@ app = Flask(__name__)
 TIKTOK_USERNAME = parse_arguments().user
 client = TikTokLiveClient(unique_id=TIKTOK_USERNAME)
 
+# sys.exit(0)
+
 AUDIO_FILE = "resultado.wav"
 
 # Fila de eventos pendentes que a página web vai consumir e exibir na tela
@@ -33,6 +38,9 @@ fila_alertas = []
 
 # Cria uma fila de mensagens segura para rodar entre Threads
 fila_processamento_tts = queue.PriorityQueue()
+
+# ADICIONE ESTA LINHA: Contador para garantir a ordem cronológica correta
+contador_ordem_chegada = 0
 
 # Dicionário global para controlar os combos ativos
 # Estrutura: { "nome_usuario": {"presente": "Rose", "quantidade": 1, "ultimo_timestamp": 12345678} }
@@ -129,59 +137,70 @@ async def on_like(event: LikeEvent):
 
 @client.on(CommentEvent)
 async def on_comment(event: CommentEvent):
+    global contador_ordem_chegada # Avisa o Python para usar a variável global
     usuario = event.user.unique_id
     mensagem = event.comment
 
-    # Cria uma chave única baseada em quem falou e o que falou
     chave_mensagem = f"{usuario}:{mensagem}"
-
-    # Se essa exata mensagem desse mesmo usuário acabou de ser recebida, ignora o reenvio
     if chave_mensagem in historico_mensagens_recentes:
         return
 
-    # Adiciona ao histórico de controle
     historico_mensagens_recentes.append(chave_mensagem)
-    # Mantém apenas as últimas 30 mensagens no histórico para não acumular memória
     if len(historico_mensagens_recentes) > 30:
         historico_mensagens_recentes.pop(0)
 
     print(f"[{usuario}]: {mensagem}")
 
-    # Ignorar comandos ou mensagens excessivamente longas
-    if len(mensagem) > 100 or mensagem.startswith("!"):
+    if len(mensagem) > 1000 or mensagem.startswith("!"):
         return
 
     texto_para_ia = f"{usuario} disse: {mensagem}"
 
-    # Envia para a fila de prioridades do seu PC (Prioridade 2 = Chat Normal)
-    fila_processamento_tts.put((2, texto_para_ia))
+    # INCREMENTA E ENVIAR COM O CONTADOR DE DESEMPATE
+    contador_ordem_chegada += 1
+    # A estrutura agora é: (Prioridade, Contador, Texto)
+    fila_processamento_tts.put((2, contador_ordem_chegada, texto_para_ia))
 
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
     usuario = event.user.unique_id
-    presente = event.gift.name
+    gift = event.gift
 
-    # O TikTokLive costuma enviar a contagem acumulada no próprio evento (event.gift.combo_count)
-    # Mas como alguns presentes de clique único não acumulam nativamente, nosso script gerencia de forma manual e segura:
-    agora = time.time()
+    if gift is None:
+        return
 
-    if usuario in combos_ativos and combos_ativos[usuario]["presente"] == presente:
-        # Se o usuário já estava em combo com esse mesmo presente, apenas incrementa e atualiza o tempo
-        combos_ativos[usuario]["quantidade"] += 1
-        combos_ativos[usuario]["ultimo_timestamp"] = agora
-        print(f"➕ [+1 no Combo] {usuario} está combando {presente}! Total atual: {combos_ativos[usuario]['quantidade']}")
-    else:
-        # Se é o primeiro presente ou um presente diferente, inicia um novo monitoramento
-        combos_ativos[usuario] = {
-            "presente": presente,
-            "quantidade": 1,
-            "ultimo_timestamp": agora
-        }
-        print(f"🎁 [Novo Combo Iniciado] {usuario} enviou um {presente}.")
+    # Usando a lógica oficial do GitHub da API para filtrar combos finalizados ou presentes únicos
+    # Se NÃO está mais combando (acabou o clique) e é um presente de combo (type == 1)
+    if not event.streaking and gift.type == 1:
+        total_presentes = event.repeat_count
+        if total_presentes > 1:
+            mensagem_alerta = f"Obrigado pelo combo de {total_presentes} {gift.name}s, {usuario}!"
+        else:
+            mensagem_alerta = f"Obrigado pelo {gift.name}, {usuario}!"
 
-        # Dispara uma Thread temporária em background para esperar o combo terminar
-        # sem congelar a recepção de novos presentes da live
-        threading.Thread(target=monitorar_e_enviar_combo, args=(usuario,), daemon=True).start()
+        # Envia apenas uma vez o alerta definitivo para o console, IA e HTML
+        processar_alerta_presente(mensagem_alerta)
+
+    # Se for um presente que NÃO acumula combo (tipo uma rosa isolada ou presente caro de clique único)
+    elif gift.type != 1:
+        mensagem_alerta = f"Obrigado pelo {gift.name}, {usuario}!"
+        processar_alerta_presente(mensagem_alerta)
+
+def processar_alerta_presente(mensagem_alerta):
+    """Função auxiliar para centralizar os envios sem repetir código"""
+    global contador_ordem_chegada
+    print(f"🎁 Presente Confirmado! Enviando para a IA: {mensagem_alerta} -- {tim}")
+
+    contador_ordem_chegada += 1
+    # Envia para a fila do Kokoro com Prioridade 1 (Máxima)
+    fila_processamento_tts.put((1, contador_ordem_chegada, mensagem_alerta))
+
+    # Alerta o HTML imediatamente para piscar o visual na tela
+    fila_alertas.append({
+        "tipo": "gift",
+        "reproduzir": True,
+        "mensagem": mensagem_alerta
+    })
 
 
 # --- CONFIGURAÇÃO DA THREAD DO TIKTOK ---
@@ -190,33 +209,32 @@ def rodar_tiktok():
     asyncio.set_event_loop(asyncio.new_event_loop())
     try:
         print(f"🤖 Linha do TikTok ativada para: @{TIKTOK_USERNAME}")
-        client.run()
+        client.run(fetch_gift_info=True)
     except Exception as e:
         print(f"Conexão do TikTok encerrada ou indisponível: {e}")
 
+
+
 def processador_de_audio():
     while True:
-        # Agora recebemos a prioridade e o texto da tupla
-        prioridade, texto_para_ia = fila_processamento_tts.get()
+        # CORREÇÃO AQUI: Agora desempacota 3 variáveis (recebe o 'contador' no meio)
+        prioridade, contador, texto_para_ia = fila_processamento_tts.get()
 
         tempo_start = time.time()
-
-        # Um aviso no terminal para você ver a prioridade funcionando
         status_prio = "⚡ PRESENTE" if prioridade == 1 else "💬 CHAT"
         print(f"⚙️ [{status_prio}] Processando áudio agora: '{texto_para_ia}'")
 
         try:
-            # Executa o Kokoro passando o texto
             subprocess.run(['python3', 'testar_voz.py', texto_para_ia], check=True)
-
-            # Alerta o HTML para tocar
             fila_alertas.append({"tipo": "tts", "reproduzir": True})
-            print(f"✅ Áudio procesado em {time.time() - tempo_start} segundos... Enviado para o navegador!")
+            print(f"✅ Áudio processado em {time.time() - tempo_start} segundos... Enviado para o navegador!\n")
 
+        except subprocess.CalledProcessError:
+            print("⚠️ Geração de áudio interrompida ou falhou.")
         except Exception as e:
             print(f"❌ Erro ao processar o áudio na Thread: {e}")
-
-        fila_processamento_tts.task_done()
+        finally:
+            fila_processamento_tts.task_done()
 
 # --- ROTAS DO FLASK (INTERFACE WEB) ---
 
@@ -235,6 +253,39 @@ def obter_alerta():
 @app.route('/audio')
 def obter_audio():
     return send_from_directory(os.getcwd(), AUDIO_FILE)
+
+def encerrar_sistema_graciosamente(sinal, frame):
+    """Função chamada automaticamente ao apertar Ctrl+C no terminal ou Termux"""
+    print("\n🛑 Encerramento seguro solicitado! Desconectando serviços...")
+
+    # 1. Desconecta do TikTok de forma limpa se estiver conectado
+    if client.connected:
+        print("🔌 Desconectando da Live do TikTok...")
+        # Como o disconnect é uma função assíncrona (async), rodamos com o loop correto
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(client.disconnect())
+            else:
+                loop.run_until_complete(client.disconnect())
+        except Exception:
+            pass
+
+    # 2. Limpa as filas de alertas e TTS para interromper novos processamentos
+    print("🧹 Limpando filas de processamento...")
+    while not fila_processamento_tts.empty():
+        try:
+            fila_processamento_tts.get_nowait()
+            fila_processamento_tts.task_done()
+        except queue.Empty:
+            break
+
+    print("👋 Sistema finalizado com sucesso. Até a próxima live!")
+    # Fecha o processo principal de forma limpa (código 0 significa sem erros)
+    os._exit(0)
+
+# Registra o gerenciador para capturar o Ctrl+C (SIGINT)
+signal.signal(signal.SIGINT, encerrar_sistema_graciosamente)
 
 if __name__ == '__main__':
     # 1. Thread 1: Escuta o TikTok

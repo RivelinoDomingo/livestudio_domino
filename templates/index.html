@@ -136,6 +136,7 @@
     <div class="painel-controles">
         <button onclick="alternarCamera()" style="background: #00b37e;">🎥 Alternar Câmera</button>
         <button onclick="rotacionarCamera()" style="background: #4834d4;">🔄 Girar 90°</button>
+        <button onclick="ativarTelaCheia()" style="background: #ff9f43;">📺 Tela Cheia</button>
     </div>
 
     <video id="webcam-fundo" autoplay playsinline></video>
@@ -190,6 +191,28 @@
                 if(posicaoCamera === "environment") {
                     posicaoCamera = "user";
                     iniciarCamera();
+                }
+            }
+        }
+
+        function ativarTelaCheia() {
+            const elemento = document.documentElement; // Pega a página inteira
+
+            if (!document.fullscreenElement) {
+                // Força entrar em tela cheia sumindo com todas as barras do Android
+                if (elemento.requestFullscreen) {
+                    elemento.requestFullscreen();
+                } else if (elemento.mozRequestFullScreen) { // Especial para o Firefox antigo/específico
+                    elemento.mozRequestFullScreen();
+                } else if (elemento.webkitRequestFullscreen) {
+                    elemento.webkitRequestFullscreen();
+                } else if (elemento.msRequestFullscreen) {
+                    elemento.msRequestFullscreen();
+                }
+            } else {
+                // Se clicar de novo, ele sai do modo tela cheia
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
                 }
             }
         }
@@ -288,7 +311,7 @@
                         setTimeout(() => {
                             box.style.display = "none";
                             video.pause();
-                        }, 10000);
+                        }, 13000);
                     }
                 }
             } catch (err) { }
