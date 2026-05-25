@@ -33,6 +33,9 @@ client = TikTokLiveClient(unique_id=TIKTOK_USERNAME)
 
 AUDIO_FILE = "resultado.wav"
 
+likes_meme = 200
+caracters_nick = 20
+
 # Fila de eventos pendentes que a página web vai consumir e exibir na tela
 fila_alertas = []
 
@@ -98,6 +101,9 @@ async def on_connect(event: ConnectEvent):
 @client.on(LikeEvent)
 async def on_like(event: LikeEvent):
     usuario = event.user.unique_id
+    nickname = event.user.nickname[:caracters_nick]
+
+    # print(f"Nome do usuario @{usuario}     |      Nickname({nickname}) -- Nick Cortado {nickname[:caracters_nick]}")
 
     try:
         # Extrai o 'count' (quantidade de cliques do bloco atual) que você descobriu
@@ -122,10 +128,10 @@ async def on_like(event: LikeEvent):
     # print(f"❤️ {usuario} enviou um bloco de +{likes_enviados} curtidas! (Total dele: {total_atual} | Total da Live: {total_da_live})")
 
     # Verifica se ele cruzou a barreira de mais uma centena dupla (200, 400, 600...)
-    if (total_atual // 200) > (total_antigo // 200):
-        marcador = (total_atual // 200) * 200
+    if (total_atual // likes_meme) > (total_antigo // likes_meme):
+        marcador = (total_atual // likes_meme) * likes_meme
 
-        mensagem_likes = f"{usuario} enviou mais de {marcador} curtidas!"
+        mensagem_likes = f"{nickname} enviou mais de {marcador} curtidas!"
         print(f"❤️ Meta de Likes! {mensagem_likes}")
 
         # Envia para a fila visual do HTML para piscar o banner na tela da live
@@ -139,6 +145,7 @@ async def on_like(event: LikeEvent):
 async def on_comment(event: CommentEvent):
     global contador_ordem_chegada # Avisa o Python para usar a variável global
     usuario = event.user.unique_id
+    nickname = event.user.nickname[:caracters_nick]
     mensagem = event.comment
 
     chave_mensagem = f"{usuario}:{mensagem}"
@@ -154,7 +161,7 @@ async def on_comment(event: CommentEvent):
     if len(mensagem) > 1000 or mensagem.startswith("!"):
         return
 
-    texto_para_ia = f"{usuario} disse: {mensagem}"
+    texto_para_ia = f"{nickname} disse: {mensagem}"
 
     # INCREMENTA E ENVIAR COM O CONTADOR DE DESEMPATE
     contador_ordem_chegada += 1
@@ -164,6 +171,7 @@ async def on_comment(event: CommentEvent):
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
     usuario = event.user.unique_id
+    nickname = event.user.nickname[:caracters_nick]
     gift = event.gift
 
     if gift is None:
@@ -174,16 +182,16 @@ async def on_gift(event: GiftEvent):
     if not event.streaking and gift.type == 1:
         total_presentes = event.repeat_count
         if total_presentes > 1:
-            mensagem_alerta = f"Obrigado pelo combo de {total_presentes} {gift.name}s, {usuario}!"
+            mensagem_alerta = f"Obrigado pelo combo de {total_presentes} {gift.name}s, {nickname}!"
         else:
-            mensagem_alerta = f"Obrigado pelo {gift.name}, {usuario}!"
+            mensagem_alerta = f"Obrigado pelo {gift.name}, {nickname}!"
 
         # Envia apenas uma vez o alerta definitivo para o console, IA e HTML
         processar_alerta_presente(mensagem_alerta)
 
     # Se for um presente que NÃO acumula combo (tipo uma rosa isolada ou presente caro de clique único)
     elif gift.type != 1:
-        mensagem_alerta = f"Obrigado pelo {gift.name}, {usuario}!"
+        mensagem_alerta = f"Obrigado pelo {gift.name}, {nickname}!"
         processar_alerta_presente(mensagem_alerta)
 
 def processar_alerta_presente(mensagem_alerta):
