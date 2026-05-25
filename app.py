@@ -7,7 +7,9 @@ import logging
 import queue
 import time
 import sys
+import requests  # pip install requests
 import signal
+import betterproto
 import argparse
 from TikTokLive import TikTokLiveClient
 from TikTokLive.events import CommentEvent, GiftEvent, LikeEvent, ConnectEvent
@@ -58,6 +60,28 @@ historico_mensagens_recentes = []
 # Tempo em segundos para esperar o combo terminar antes da IA falar
 TEMPO_ESPERA_COMBO = 4.0
 
+def get_nickname(event) -> str:
+    try:
+        # Tenta acessar via user_info bruto antes do ExtendedUser quebrar
+        user_info = event.user_info
+        raw = user_info.to_pydict(casing=betterproto.Casing.SNAKE)
+        return (
+            raw.get('nick_name') or
+            raw.get('nickname') or
+            raw.get('unique_id') or
+            'Desconhecido'
+        )
+    except Exception:
+        return 'Desconhecido'
+
+def get_unique_id(event) -> str:
+    try:
+        user_info = event.user_info
+        raw = user_info.to_pydict(casing=betterproto.Casing.SNAKE)
+        return raw.get('unique_id') or raw.get('username') or 'Desconhecido'
+    except Exception:
+        return 'Desconhecido'
+
 def monitorar_e_enviar_combo(usuario):
     """Aguarda o tempo de espera terminar para verificar se o combo fechou,
     e então envia um único agradecimento para a fila da IA."""
@@ -100,8 +124,10 @@ async def on_connect(event: ConnectEvent):
 
 @client.on(LikeEvent)
 async def on_like(event: LikeEvent):
-    usuario = event.user.unique_id
-    nickname = event.user.nickname[:caracters_nick]
+    usuario = get_unique_id(event)
+    nickname = get_nickname(event)[:caracters_nick]
+
+    # print(vars(event.user))
 
     # print(f"Nome do usuario @{usuario}     |      Nickname({nickname}) -- Nick Cortado {nickname[:caracters_nick]}")
 
@@ -144,8 +170,8 @@ async def on_like(event: LikeEvent):
 @client.on(CommentEvent)
 async def on_comment(event: CommentEvent):
     global contador_ordem_chegada # Avisa o Python para usar a variável global
-    usuario = event.user.unique_id
-    nickname = event.user.nickname[:caracters_nick]
+    usuario = get_unique_id(event)
+    nickname = get_nickname(event)[:caracters_nick]
     mensagem = event.comment
 
     chave_mensagem = f"{usuario}:{mensagem}"
@@ -170,8 +196,8 @@ async def on_comment(event: CommentEvent):
 
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
-    usuario = event.user.unique_id
-    nickname = event.user.nickname[:caracters_nick]
+    usuario = get_unique_id(event)
+    nickname = get_nickname(event)[:caracters_nick]
     gift = event.gift
 
     if gift is None:
@@ -266,6 +292,73 @@ def obter_alerta():
 @app.route('/audio')
 def obter_audio():
     return send_from_directory(os.getcwd(), AUDIO_FILE)
+
+@app.route('/radio-proxy')
+def radio_proxy():
+    from flask import request as flask_request, Response
+
+    url_stream = flask_request.args.get('url', '').strip()
+    if not url_stream:
+        return "URL não fornecida", 400
+
+    # Garante esquema e caminho /stream
+    if not url_stream.startswith('http'):
+        url_stream = 'http://' + url_stream
+    from urllib.parse import urlparse, urlunparse
+    parsed = urlparse(url_stream)
+    if parsed.path in ('', '/'):
+        parsed = parsed._replace(path='/stream')
+        url_stream = urlunparse(parsed)
+
+    print(f"\n📻 [RADIO-PROXY] Conectando em: {url_stream}")
+
+    try:
+        resp = requests.get(
+            url_stream,
+            stream=True,
+            timeout=10,
+            headers={
+                'User-Agent': 'Mozilla/5.0',
+                'Accept': 'audio/aac, audio/*, */*',
+                'Connection': 'keep-alive',
+                'Icy-MetaData': '0',
+            }
+        )
+
+        print(f"📻 [RADIO-PROXY] Status: {resp.status_code}")
+        print(f"📻 [RADIO-PROXY] Content-Type recebido: {resp.headers.get('Content-Type')}")
+
+        if resp.status_code != 200:
+            return f"Stream retornou status {resp.status_code}", 502
+
+        # WifiAudioStreaming serve AAC — força o content-type correto
+        # para o browser aceitar como áudio (sem isso retorna text/html em alguns casos)
+        content_type = resp.headers.get('Content-Type', '')
+        if 'audio' not in content_type:
+            content_type = 'audio/aac'
+        print(f"📻 [RADIO-PROXY] Content-Type enviado ao browser: {content_type}")
+
+        def gerar():
+            try:
+                for i, chunk in enumerate(resp.iter_content(chunk_size=8192)):
+                    if chunk:
+                        if i == 0:
+                            print(f"📻 [RADIO-PROXY] Streaming iniciado! Primeiro chunk: {len(chunk)} bytes")
+                        yield chunk
+            except Exception as e:
+                print(f"❌ [RADIO-PROXY] Erro no stream: {e}")
+
+        return Response(gerar(), content_type=content_type)
+
+    except requests.exceptions.ConnectionError as e:
+        print(f"❌ [RADIO-PROXY] Erro de conexão: {e}")
+        return f"Não foi possível conectar em {url_stream}", 502
+    except requests.exceptions.Timeout:
+        print(f"❌ [RADIO-PROXY] Timeout")
+        return "Timeout ao conectar no stream", 502
+    except Exception as e:
+        print(f"❌ [RADIO-PROXY] Erro inesperado: {e}")
+        return f"Erro: {e}", 502
 
 def encerrar_sistema_graciosamente(sinal, frame):
     """Função chamada automaticamente ao apertar Ctrl+C no terminal ou Termux"""
