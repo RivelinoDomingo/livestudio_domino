@@ -178,45 +178,10 @@
         .detalhes-jogo { font-size: 11px; color: #a8a8b3; margin-top: 2px; }
 
         /* --- ALERTAS --- */
-        .caixa-alerta {
-            display: none;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(0,0,0,0.95);
-            padding: 14px;
-            border-radius: 15px;
-            text-align: center;
-            z-index: 500;
-            border: 3px solid #4834d4;
-            box-shadow: 0 0 30px rgba(0,0,0,0.9);
-            /* Limita ao viewport do overlay (100vw x 100vh landscape = 100vh x 100vw) */
-            max-width: 88vh;
-            max-height: 80vw;
-            width: max-content;
-            box-sizing: border-box;
-        }
-
-        /* Vídeo do alerta escala para nunca ultrapassar a caixa */
-        .caixa-alerta video {
-            display: block;
-            max-width: 100%;
-            max-height: 55vw;   /* ~55% da altura landscape = viewport height */
-            width: auto;
-            height: auto;
-            border-radius: 8px;
-        }
-
-        .texto-alerta {
-            font-size: 18px;
-            color: #fff;
-            margin-top: 8px;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            /* Quebra linha se nome for longo */
-            word-break: break-word;
-            max-width: 84vh;
+        /* Banner único — estilos principais são inline no HTML para clareza */
+        #banner-alerta {
+            /* Fundo escuro semitransparente apenas atrás do texto inferior */
+            background: transparent;
         }
 
         /* --- MODAL RÁDIO --- */
@@ -334,16 +299,31 @@
             <div id="jogadores-lista">Carregando dados...</div>
         </div>
 
-        <!-- Alerta de presente -->
-        <div id="alerta-presente" class="caixa-alerta">
-            <video id="meme-video" width="320" playsinline></video>
-            <div id="meme-texto" class="texto-alerta"></div>
-        </div>
-
-        <!-- Alerta de like -->
-        <div id="alerta-like" class="caixa-alerta">
-            <video id="meme-like-video" width="320" playsinline></video>
-            <div id="meme-like-texto" class="texto-alerta"></div>
+        <!-- Banner único de alertas (gift + like) com fila e prioridade -->
+        <div id="banner-alerta" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; z-index:500; pointer-events:none;">
+            <!-- Vídeo centralizado -->
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-55%); text-align:center;">
+                <video id="meme-video" playsinline
+                       style="max-width:84vh; max-height:52vw; border-radius:10px; display:block;"></video>
+            </div>
+            <!-- Texto ancorado na parte inferior -->
+            <div id="banner-texto-container" style="
+                position:absolute; bottom:18px; left:0; width:100%;
+                text-align:center; padding:0 20px;">
+                <!-- Tipo do alerta (ícone) -->
+                <div id="banner-icone" style="font-size:20px; margin-bottom:4px;"></div>
+                <!-- Mensagem principal (nome do doador) -->
+                <div id="banner-texto" style="
+                    font-size:20px; font-weight:bold; color:#fff;
+                    text-shadow:2px 2px 6px rgba(0,0,0,0.9);
+                    background:rgba(0,0,0,0.55); border-radius:8px;
+                    padding:6px 14px; display:inline-block;
+                    max-width:90%; word-break:break-word;"></div>
+                <!-- Fila de próximos (aparece quando há mais de 1 pendente) -->
+                <div id="banner-fila-info" style="
+                    font-size:11px; color:#ccc; margin-top:4px;
+                    opacity:0.8;"></div>
+            </div>
         </div>
 
         <!-- Modal Rádio -->
@@ -613,6 +593,122 @@
             } catch (err) { console.error("Erro Firebase:", err); }
         }
 
+        // ── FILA DE ALERTAS COM PRIORIDADE ──────────────────────
+        //
+        // Estrutura de cada item: { tipo, mensagem, prioridade }
+        //   prioridade 1 = gift (máxima)
+        //   prioridade 2 = like
+        //
+        // Comportamento:
+        //   - Se banner estiver livre → exibe imediatamente
+        //   - Se banner ocupado com like e chega gift → interrompe e exibe gift
+        //   - Se banner ocupado com gift e chega like → só atualiza o texto (não interrompe)
+        //   - Se banner ocupado com mesmo tipo → só atualiza o texto
+        //   - TTS roda paralelo (áudio apenas, sem banner)
+
+        const filaAlertas = [];          // fila de pendentes
+        let bannerAtivo   = false;       // true enquanto o banner estiver visível
+        let tipoAtivo     = null;        // 'gift' | 'like' | null
+        let timerBanner   = null;        // referência do setTimeout atual
+
+        const DURACAO = { gift: 10000, like: 13000 };
+        const CONFIG  = {
+            gift: { src: '/static/EH_Nois.mp4', icone: '🎁', cor: '#ff9f43' },
+            like: { src: '/static/DInovo.mp4',  icone: '❤️', cor: '#ff007f' },
+        };
+
+        function atualizarInfoFila() {
+            const el = document.getElementById('banner-fila-info');
+            if (filaAlertas.length > 0) {
+                const gifts = filaAlertas.filter(a => a.tipo === 'gift').length;
+                const likes = filaAlertas.filter(a => a.tipo === 'like').length;
+                const partes = [];
+                if (gifts) partes.push(`+${gifts} presente${gifts>1?'s':''}`);
+                if (likes) partes.push(`+${likes} like${likes>1?'s':''}`);
+                el.textContent = partes.length ? `Na fila: ${partes.join(' · ')}` : '';
+            } else {
+                el.textContent = '';
+            }
+        }
+
+        function exibirBanner(tipo, mensagem) {
+            const cfg   = CONFIG[tipo];
+            const video = document.getElementById('meme-video');
+            const banner = document.getElementById('banner-alerta');
+
+            // Só recarrega o vídeo se o tipo mudou (evita piscar desnecessário)
+            if (tipoAtivo !== tipo) {
+                video.src = cfg.src;
+                video.volume = volAlertas;
+                video.load();
+                video.play().catch(e => console.log('Vídeo alerta:', e));
+            }
+
+            document.getElementById('banner-icone').textContent = cfg.icone;
+            document.getElementById('banner-texto').textContent  = mensagem;
+            banner.style.display = 'block';
+            bannerAtivo = true;
+            tipoAtivo   = tipo;
+
+            duckRadio(DURACAO[tipo]);
+
+            // Reseta o timer sempre que exibir (novo presente reinicia contagem)
+            if (timerBanner) clearTimeout(timerBanner);
+            timerBanner = setTimeout(() => {
+                fecharBanner();
+            }, DURACAO[tipo]);
+
+            atualizarInfoFila();
+        }
+
+        function fecharBanner() {
+            document.getElementById('banner-alerta').style.display = 'none';
+            document.getElementById('meme-video').pause();
+            bannerAtivo = false;
+            tipoAtivo   = null;
+            timerBanner = null;
+            atualizarInfoFila();
+            // Processa próximo da fila se houver
+            processarFila();
+        }
+
+        function processarFila() {
+            if (filaAlertas.length === 0) return;
+            // Ordena por prioridade (menor número = maior prioridade)
+            filaAlertas.sort((a, b) => a.prioridade - b.prioridade);
+            const proximo = filaAlertas.shift();
+            exibirBanner(proximo.tipo, proximo.mensagem);
+        }
+
+        function enfileirarAlerta(tipo, mensagem) {
+            const prioridade = tipo === 'gift' ? 1 : 2;
+
+            if (!bannerAtivo) {
+                // Banner livre → exibe direto
+                exibirBanner(tipo, mensagem);
+                return;
+            }
+
+            // Banner ocupado:
+            if (tipo === 'gift' && tipoAtivo === 'like') {
+                // Gift interrompe like → exibe imediatamente
+                exibirBanner(tipo, mensagem);
+                return;
+            }
+
+            if (tipo === tipoAtivo) {
+                // Mesmo tipo → atualiza só o texto, reinicia timer
+                document.getElementById('banner-texto').textContent = mensagem;
+                if (timerBanner) clearTimeout(timerBanner);
+                timerBanner = setTimeout(fecharBanner, DURACAO[tipo]);
+                return;
+            }
+
+            // Caso contrário (like chegou enquanto gift toca) → enfileira
+            filaAlertas.push({ tipo, mensagem, prioridade });
+            atualizarInfoFila();
+        }
+
         // ── ALERTAS TTS / PRESENTES / LIKES ──────────────────────
         async function checarNovosAlertas() {
             try {
@@ -620,37 +716,17 @@
                 if (!data.reproduzir) return;
 
                 if (data.tipo === "tts") {
+                    // TTS roda paralelo: só áudio, sem interferir no banner
                     audioTTS.src = "/audio?" + Date.now();
                     audioTTS.volume = volAlertas;
-                    // Ducking: abaixa rádio pelo tempo estimado do TTS (~8s)
                     duckRadio(8000);
                     audioTTS.play();
 
                 } else if (data.tipo === "gift") {
-                    const box   = document.getElementById('alerta-presente');
-                    const video = document.getElementById('meme-video');
-                    video.src = "/static/EH_Nois.mp4";
-                    video.volume = volAlertas;
-                    document.getElementById('meme-texto').innerText = data.mensagem;
-                    box.style.borderColor = "#ff9f43";
-                    box.style.display = "block";
-                    duckRadio(10000);
-                    video.load();
-                    video.play().catch(e => console.log(e));
-                    setTimeout(() => { box.style.display = "none"; video.pause(); }, 10000);
+                    enfileirarAlerta('gift', data.mensagem);
 
                 } else if (data.tipo === "like") {
-                    const box   = document.getElementById('alerta-like');
-                    const video = document.getElementById('meme-like-video');
-                    video.src = "/static/DInovo.mp4";
-                    video.volume = volAlertas;
-                    document.getElementById('meme-like-texto').innerText = data.mensagem;
-                    box.style.borderColor = "#ff007f";
-                    box.style.display = "block";
-                    duckRadio(13000);
-                    video.load();
-                    video.play().catch(e => console.log(e));
-                    setTimeout(() => { box.style.display = "none"; video.pause(); }, 13000);
+                    enfileirarAlerta('like', data.mensagem);
                 }
             } catch (err) {}
         }
