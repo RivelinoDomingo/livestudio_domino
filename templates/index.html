@@ -219,6 +219,17 @@
         }
         #debug-painel b { color: #fff; }
     </style>
+
+    <script>
+        // Registra o Service Worker para cache dos arquivos /static
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('[SW] Registrado:', reg.scope))
+                    .catch(err => console.warn('[SW] Falha no registro:', err));
+            });
+        }
+    </script>
 </head>
 <body>
 
@@ -246,17 +257,13 @@
 
         <!-- Alerta de presente -->
         <div id="alerta-presente" class="caixa-alerta">
-            <video id="meme-video" width="320" playsinline>
-                <source id="meme-src" src="" type="video/mp4">
-            </video>
+            <video id="meme-video" width="320" playsinline></video>
             <div id="meme-texto" class="texto-alerta"></div>
         </div>
 
         <!-- Alerta de like -->
         <div id="alerta-like" class="caixa-alerta">
-            <video id="meme-like-video" width="320" playsinline>
-                <source id="meme-like-src" src="" type="video/mp4">
-            </video>
+            <video id="meme-like-video" width="320" playsinline></video>
             <div id="meme-like-texto" class="texto-alerta"></div>
         </div>
 
@@ -435,7 +442,7 @@
                 } else if (data.tipo === "gift") {
                     const box   = document.getElementById('alerta-presente');
                     const video = document.getElementById('meme-video');
-                    document.getElementById('meme-src').src  = "/static/EH_Nois.mp4";
+                    video.src = "/static/EH_Nois.mp4";
                     document.getElementById('meme-texto').innerText = data.mensagem;
                     box.style.borderColor = "#ff9f43";
                     box.style.display = "block";
@@ -446,7 +453,7 @@
                 } else if (data.tipo === "like") {
                     const box   = document.getElementById('alerta-like');
                     const video = document.getElementById('meme-like-video');
-                    document.getElementById('meme-like-src').src = "/static/DInovo.mp4";
+                    video.src = "/static/DInovo.mp4";
                     document.getElementById('meme-like-texto').innerText = data.mensagem;
                     box.style.borderColor = "#ff007f";
                     box.style.display = "block";

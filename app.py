@@ -251,6 +251,11 @@ def index():
     # Renderiza automaticamente o arquivo 'templates/index.html'
     return render_template('index.html')
 
+@app.route('/sw.js')
+def service_worker():
+    return send_from_directory(os.getcwd(), 'sw.js',
+                               mimetype='application/javascript')
+
 @app.route('/obter_alerta')
 def obter_alerta():
     """A página web consulta essa rota a cada segundo procurando novas interações"""
@@ -306,4 +311,6 @@ if __name__ == '__main__':
 
     # 3. Inicia o Flask
     print("🚀 Servidor da Live iniciado em http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    # app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    # Com ssl_context do pacote pip pyopenssl
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, ssl_context='adhoc')
