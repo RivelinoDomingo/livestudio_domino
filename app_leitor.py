@@ -160,6 +160,8 @@ def falar():
             capture_output=True, text=True, check=True
         )
 
+        tempgasto = time.time() - tempo_total
+        print(f"Processou audio: {time.time()} gastou: [{tempgasto:.2f} segundos]")
         return jsonify({"sucesso": True})
     except subprocess.CalledProcessError as e:
         return jsonify({"sucesso": False, "erro": e.stderr or str(e)})
@@ -167,8 +169,6 @@ def falar():
 @app.route('/audio')
 def obter_audio():
     # Serve o arquivo .wav gerado para que a página possa reproduzir
-    tempgasto = time.time() - tempo_total
-    print(f"Enviou audio: {time.time()} gastou: {tempgasto:.2f} segundos")
     return send_from_directory(os.getcwd(), AUDIO_FILE)
 
 if __name__ == '__main__':
