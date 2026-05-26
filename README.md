@@ -285,6 +285,8 @@ Gere o `requirements.txt` com:
 pip freeze > requirements.txt
 # E para instalar as dependências necessácias 
 pip install -r requirements.txt
+# Ou 
+pip install flask TikTokLive kokoro-onnx soundfile requests pyopenssl betterproto emoji
 ```
 
 ---
