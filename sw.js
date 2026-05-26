@@ -18,7 +18,15 @@ const ARQUIVOS_PARA_CACHEAR = [
 const SEMPRE_REDE = [
     '/obter_alerta',
     '/audio',
+    '/radio-proxy',
     'firestore.googleapis.com',
+];
+
+// Rotas que o SW nunca deve interceptar (fetch events do próprio servidor Flask)
+const IGNORAR_SW = [
+    '/obter_alerta',
+    '/audio',
+    '/radio-proxy',
 ];
 
 // ── INSTALL: baixa e armazena os estáticos ──────────────────
@@ -61,9 +69,14 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const url = event.request.url;
 
-    // Rotas dinâmicas → sempre busca na rede, sem cache
-    const ehDinamico = SEMPRE_REDE.some(trecho => url.includes(trecho));
-    if (ehDinamico) {
+    // Rotas dinâmicas críticas → SW não intercepta de forma alguma
+    // (deixa o browser fazer o fetch diretamente, evitando falhas de rede no SW)
+    const ehDinamico = IGNORAR_SW.some(trecho => url.includes(trecho));
+    if (ehDinamico) return;  // não chama event.respondWith → browser assume o controle
+
+    // Demais rotas da rede → busca normalmente sem cache
+    const ehRedeSimples = SEMPRE_REDE.some(trecho => url.includes(trecho));
+    if (ehRedeSimples) {
         event.respondWith(fetch(event.request));
         return;
     }

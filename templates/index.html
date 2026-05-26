@@ -114,8 +114,8 @@
         /* --- PLACAR --- */
         .placar-container {
             position: absolute;
-            top: 15px;
-            left: 15px;
+            top: 5px;
+            left: 10px;
             background-color: rgba(18, 18, 20, 0.15);
             backdrop-filter: blur(5px);
             -webkit-backdrop-filter: blur(5px);
@@ -135,6 +135,78 @@
             letter-spacing: 1px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
             padding-bottom: 3px;
+        }
+
+        /* --- LISTA DE DOADORES --- */
+        #doadores-container {
+            position: absolute;
+            /* Abaixo do placar: top placar (15px) + altura média do placar + gap */
+            top: 235px;
+            left: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .doador-card {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(18, 18, 20, 0.75);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            border-radius: 20px;
+            padding: 4px 10px 4px 4px;
+            border: 1px solid rgba(255, 179, 126, 0.3);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-12px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+
+        .doador-posicao {
+            font-size: 10px;
+            color: #ff9f43;
+            font-weight: bold;
+            min-width: 14px;
+            text-align: center;
+        }
+
+        .doador-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid #ff9f43;
+            background: #2e2e35;
+            /* Fallback se imagem expirar */
+            flex-shrink: 0;
+        }
+
+        .doador-avatar-fallback {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ff9f43, #ff6b35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            flex-shrink: 0;
+            border: 1.5px solid #ff9f43;
+        }
+
+        .doador-nick {
+            font-size: 11px;
+            font-weight: bold;
+            color: #fff;
+            max-width: 90px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .jogador-item {
@@ -294,10 +366,13 @@
         </div>
 
         <!-- Placar -->
-        <div class="placar-container">
+        <div class="placar-container" id="placar-container">
             <div class="placar-titulo">📯 Placar</div>
             <div id="jogadores-lista">Carregando dados...</div>
         </div>
+
+        <!-- Lista dos últimos doadores -->
+        <div id="doadores-container"></div>
 
         <!-- Banner único de alertas (gift + like) com fila e prioridade -->
         <div id="banner-alerta" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; z-index:500; pointer-events:none;">
@@ -560,6 +635,49 @@
             }
         }, 1000);
 
+        // ── LISTA DE DOADORES ─────────────────────────────────────
+        // Guarda até 3 doadores: [{ nickname, avatar_url }]
+        // 1° = mais recente (topo), 3° = mais antigo (base)
+        const listaDoadores = [];
+
+        function atualizarDoadores(nickname, avatar_url) {
+            // Remove se já existia (vai para o topo)
+            const idx = listaDoadores.findIndex(d => d.nickname === nickname);
+            if (idx !== -1) listaDoadores.splice(idx, 1);
+
+            // Insere no início (1° lugar = mais recente)
+            listaDoadores.unshift({ nickname, avatar_url });
+
+            // Mantém apenas os 3 últimos
+            if (listaDoadores.length > 3) listaDoadores.pop();
+
+            renderizarDoadores();
+        }
+
+        function renderizarDoadores() {
+            const container = document.getElementById('doadores-container');
+            // console.log('[DOADORES] renderizando', listaDoadores.length, 'itens | container:', !!container);
+            if (!container) return;
+            const posEmoji = ['🥇', '🥈', '🥉'];
+
+            container.innerHTML = listaDoadores.map((d, i) => {
+                const avatarHtml = d.avatar_url
+                    ? `<img class="doador-avatar"
+                            src="${d.avatar_url}"
+                            alt="${d.nickname}"
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                       <div class="doador-avatar-fallback" style="display:none;">🎁</div>`
+                    : `<div class="doador-avatar-fallback">🎁</div>`;
+
+                return `
+                    <div class="doador-card">
+                        <span class="doador-posicao">${posEmoji[i]}</span>
+                        ${avatarHtml}
+                        <span class="doador-nick">${d.nickname}</span>
+                    </div>`;
+            }).join('');
+        }
+
         // ── PLACAR (FIREBASE) ─────────────────────────────────────
         function gerarBlocosPontos(pontos) {
             const qtd = Math.min(Math.max(parseInt(pontos) || 0, 0), 4);
@@ -699,8 +817,8 @@
             if (tipo === tipoAtivo) {
                 // Mesmo tipo → atualiza só o texto, reinicia timer
                 document.getElementById('banner-texto').textContent = mensagem;
-                if (timerBanner) clearTimeout(timerBanner);
-                timerBanner = setTimeout(fecharBanner, DURACAO[tipo]);
+                // if (timerBanner) clearTimeout(timerBanner);
+                // timerBanner = setTimeout(fecharBanner, DURACAO[tipo]);
                 return;
             }
 
@@ -710,23 +828,40 @@
         }
 
         // ── ALERTAS TTS / PRESENTES / LIKES ──────────────────────
+        // ID do último alerta processado por este cliente.
+        // Cada aba/dispositivo tem o seu próprio — totalmente independentes.
+        let ultimoAlertaId = -1;
+
+        function processarAlerta(data) {
+            if (data.tipo === "tts") {
+                // TTS roda paralelo: só áudio, sem interferir no banner
+                audioTTS.src = "/audio?" + Date.now();
+                audioTTS.volume = volAlertas;
+                duckRadio(8000);
+                audioTTS.play();
+
+            } else if (data.tipo === "gift") {
+                enfileirarAlerta('gift', data.mensagem);
+                if (data.nickname) {
+                    atualizarDoadores(data.nickname, data.avatar_url || '');
+                }
+
+            } else if (data.tipo === "like") {
+                enfileirarAlerta('like', data.mensagem);
+            }
+        }
+
         async function checarNovosAlertas() {
             try {
-                const data = await (await fetch('/obter_alerta')).json();
+                // Envia o ultimo_id → servidor devolve só o que é mais novo
+                const data = await (await fetch('/obter_alerta?ultimo_id=' + ultimoAlertaId)).json();
                 if (!data.reproduzir) return;
 
-                if (data.tipo === "tts") {
-                    // TTS roda paralelo: só áudio, sem interferir no banner
-                    audioTTS.src = "/audio?" + Date.now();
-                    audioTTS.volume = volAlertas;
-                    duckRadio(8000);
-                    audioTTS.play();
-
-                } else if (data.tipo === "gift") {
-                    enfileirarAlerta('gift', data.mensagem);
-
-                } else if (data.tipo === "like") {
-                    enfileirarAlerta('like', data.mensagem);
+                // Processa cada alerta na ordem de chegada
+                for (const alerta of data.alertas) {
+                    processarAlerta(alerta);
+                    // Avança o ponteiro deste cliente
+                    if (alerta.id > ultimoAlertaId) ultimoAlertaId = alerta.id;
                 }
             } catch (err) {}
         }

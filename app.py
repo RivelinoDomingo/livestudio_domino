@@ -7,6 +7,8 @@ import logging
 import queue
 import time
 import sys
+import emoji
+import re
 import requests  # pip install requests
 import signal
 import betterproto
@@ -37,9 +39,15 @@ AUDIO_FILE = "resultado.wav"
 
 likes_meme = 200
 caracters_nick = 20
+caracters_coment = 500
 
-# Fila de eventos pendentes que a página web vai consumir e exibir na tela
-fila_alertas = []
+# Lista de alertas com ID sequencial global.
+# Clientes enviam seu ultimo_id e recebem apenas alertas mais novos.
+# Nunca fazemos pop() — cada cliente lê independentemente.
+fila_alertas = []          # lista de dicts com campo "id"
+fila_alertas_contador = 0  # ID global crescente
+# Mantém no máximo N alertas para não crescer indefinidamente
+FILA_ALERTAS_MAX = 50
 
 # Cria uma fila de mensagens segura para rodar entre Threads
 fila_processamento_tts = queue.PriorityQueue()
@@ -60,27 +68,35 @@ historico_mensagens_recentes = []
 # Tempo em segundos para esperar o combo terminar antes da IA falar
 TEMPO_ESPERA_COMBO = 4.0
 
-def get_nickname(event) -> str:
-    try:
-        # Tenta acessar via user_info bruto antes do ExtendedUser quebrar
-        user_info = event.user_info
-        raw = user_info.to_pydict(casing=betterproto.Casing.SNAKE)
-        return (
-            raw.get('nick_name') or
-            raw.get('nickname') or
-            raw.get('unique_id') or
-            'Desconhecido'
-        )
-    except Exception:
-        return 'Desconhecido'
+def get_nickname_from_raw(event) -> str:
+    raw = event.to_pydict(casing=betterproto.Casing.SNAKE)
+    raw_str = str(raw)  # converte tudo pra string
 
-def get_unique_id(event) -> str:
+    # Procura nick_name ou nickName seguido do valor
+    match = re.search(r"'nick(?:_?)name':\s*'([^']+)'", raw_str, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return 'Desconhecido'
+
+def get_avatar_url(event) -> str:
+    """Extrai a primeira URL do avatar do usuário do evento."""
     try:
-        user_info = event.user_info
-        raw = user_info.to_pydict(casing=betterproto.Casing.SNAKE)
-        return raw.get('unique_id') or raw.get('username') or 'Desconhecido'
+        user = event.user
+        raw = user.to_pydict(casing=betterproto.Casing.SNAKE)
+        urls = (
+            raw.get('avatar_thumb', {}).get('m_urls') or
+            raw.get('avatar_medium', {}).get('m_urls') or
+            raw.get('avatar_larger', {}).get('m_urls') or
+            []
+        )
+        # Prefere .webp; pega a primeira disponível
+        for url in urls:
+            if url:
+                return url
+        return ''
     except Exception:
-        return 'Desconhecido'
+        return ''
+
 
 def monitorar_e_enviar_combo(usuario):
     """Aguarda o tempo de espera terminar para verificar se o combo fechou,
@@ -108,11 +124,19 @@ def monitorar_e_enviar_combo(usuario):
             fila_processamento_tts.put((1, mensagem_alerta))
 
             # Alerta o HTML imediatamente para piscar o visual na tela (opcional)
-            fila_alertas.append({
+            push_alerta({
                 "tipo": "gift",
                 "reproduzir": True,
                 "mensagem": mensagem_alerta
             })
+
+def filtrar_texto_para_kokoro(texto_original):
+    """
+    Remove todos os emojis de um texto usando a biblioteca 'emoji'.
+    Substitui cada emoji por uma string vazia ('').
+    """
+    texto_filtrado = emoji.replace_emoji(texto_original, replace='')
+    return texto_filtrado.strip() # O .strip() remove espaços extras das pontas
 
 # --- EVENTOS DO TIKTOK ---
 @client.on(ConnectEvent)
@@ -124,10 +148,15 @@ async def on_connect(event: ConnectEvent):
 
 @client.on(LikeEvent)
 async def on_like(event: LikeEvent):
-    usuario = get_unique_id(event)
-    nickname = get_nickname(event)[:caracters_nick]
+    usuario = event.user.unique_id
+    nickname = get_nickname_from_raw(event)[:caracters_nick]
 
     # print(vars(event.user))
+    # try:
+    #     raw = event.to_pydict(casing=betterproto.Casing.SNAKE)
+    #     print("RAW KEYS:", raw)  # imprime o dicionário completo
+    # except Exception as e:
+    #     print("Erro ao ler user_info:", e)
 
     # print(f"Nome do usuario @{usuario}     |      Nickname({nickname}) -- Nick Cortado {nickname[:caracters_nick]}")
 
@@ -161,7 +190,7 @@ async def on_like(event: LikeEvent):
         print(f"❤️ Meta de Likes! {mensagem_likes}")
 
         # Envia para a fila visual do HTML para piscar o banner na tela da live
-        fila_alertas.append({
+        push_alerta({
             "tipo": "like",
             "reproduzir": True,
             "mensagem": mensagem_likes
@@ -170,10 +199,20 @@ async def on_like(event: LikeEvent):
 @client.on(CommentEvent)
 async def on_comment(event: CommentEvent):
     global contador_ordem_chegada # Avisa o Python para usar a variável global
-    usuario = get_unique_id(event)
-    nickname = get_nickname(event)[:caracters_nick]
+    usuario = event.user.unique_id
+    nickname = get_nickname_from_raw(event)[:caracters_nick]
     mensagem = event.comment
 
+    # print(vars(event))
+
+    print(f"[{nickname}][@{usuario}]: {mensagem}")
+
+    # try:
+    #     raw = event.to_pydict(casing=betterproto.Casing.SNAKE)
+    #     print("RAW KEYS:", raw)  # imprime o dicionário completo
+    # except Exception as e:
+    #     print("Erro ao ler user_info:", e)
+    # sys.exit(0)
     chave_mensagem = f"{usuario}:{mensagem}"
     if chave_mensagem in historico_mensagens_recentes:
         return
@@ -182,10 +221,8 @@ async def on_comment(event: CommentEvent):
     if len(historico_mensagens_recentes) > 30:
         historico_mensagens_recentes.pop(0)
 
-    print(f"[{usuario}]: {mensagem}")
-
-    if len(mensagem) > 1000 or mensagem.startswith("!"):
-        return
+    if len(mensagem) > caracters_coment:
+        mensagem = mensagem[:caracters_coment]
 
     texto_para_ia = f"{nickname} disse: {mensagem}"
 
@@ -196,8 +233,9 @@ async def on_comment(event: CommentEvent):
 
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
-    usuario = get_unique_id(event)
-    nickname = get_nickname(event)[:caracters_nick]
+    usuario = event.user.unique_id
+    nickname = get_nickname_from_raw(event)[:caracters_nick]
+    avatar_url = get_avatar_url(event)
     gift = event.gift
 
     if gift is None:
@@ -212,15 +250,14 @@ async def on_gift(event: GiftEvent):
         else:
             mensagem_alerta = f"Obrigado pelo {gift.name}, {nickname}!"
 
-        # Envia apenas uma vez o alerta definitivo para o console, IA e HTML
-        processar_alerta_presente(mensagem_alerta)
+        processar_alerta_presente(mensagem_alerta, nickname, avatar_url)
 
     # Se for um presente que NÃO acumula combo (tipo uma rosa isolada ou presente caro de clique único)
     elif gift.type != 1:
         mensagem_alerta = f"Obrigado pelo {gift.name}, {nickname}!"
-        processar_alerta_presente(mensagem_alerta)
+        processar_alerta_presente(mensagem_alerta, nickname, avatar_url)
 
-def processar_alerta_presente(mensagem_alerta):
+def processar_alerta_presente(mensagem_alerta, nickname='', avatar_url=''):
     """Função auxiliar para centralizar os envios sem repetir código"""
     global contador_ordem_chegada
     print(f"🎁 Presente Confirmado! Enviando para a IA: {mensagem_alerta}")
@@ -229,13 +266,26 @@ def processar_alerta_presente(mensagem_alerta):
     # Envia para a fila do Kokoro com Prioridade 1 (Máxima)
     fila_processamento_tts.put((1, contador_ordem_chegada, mensagem_alerta))
 
-    # Alerta o HTML imediatamente para piscar o visual na tela
-    fila_alertas.append({
+    # print("Avatar url: ", avatar_url)
+
+    # Alerta o HTML imediatamente — inclui nickname e avatar para a lista de doadores
+    push_alerta({
         "tipo": "gift",
         "reproduzir": True,
-        "mensagem": mensagem_alerta
+        "mensagem": mensagem_alerta,
+        "nickname": nickname,
+        "avatar_url": avatar_url
     })
 
+def push_alerta(alerta: dict):
+    """Adiciona alerta à lista global com ID sequencial e limpa excesso."""
+    global fila_alertas_contador
+    fila_alertas_contador += 1
+    alerta['id'] = fila_alertas_contador
+    fila_alertas.append(alerta)
+    # Remove alertas antigos se passar do limite
+    if len(fila_alertas) > FILA_ALERTAS_MAX:
+        fila_alertas.pop(0)
 
 # --- CONFIGURAÇÃO DA THREAD DO TIKTOK ---
 def rodar_tiktok():
@@ -251,8 +301,9 @@ def rodar_tiktok():
 
 def processador_de_audio():
     while True:
-        # CORREÇÃO AQUI: Agora desempacota 3 variáveis (recebe o 'contador' no meio)
-        prioridade, contador, texto_para_ia = fila_processamento_tts.get()
+        # CORREÇÃO AQUI: Agora desempacota 3 variáveis (recebe o 'contador' no meio) e flitramos emojis
+        prioridade, contador, texto_filt = fila_processamento_tts.get()
+        texto_para_ia = filtrar_texto_para_kokoro(texto_filt)
 
         tempo_start = time.time()
         status_prio = "⚡ PRESENTE" if prioridade == 1 else "💬 CHAT"
@@ -260,7 +311,7 @@ def processador_de_audio():
 
         try:
             subprocess.run(['python3', 'testar_voz.py', texto_para_ia], check=True)
-            fila_alertas.append({"tipo": "tts", "reproduzir": True})
+            push_alerta({"tipo": "tts", "reproduzir": True})
             print(f"✅ Áudio processado em {time.time() - tempo_start} segundos... Enviado para o navegador!\n")
 
         except subprocess.CalledProcessError:
@@ -284,9 +335,20 @@ def service_worker():
 
 @app.route('/obter_alerta')
 def obter_alerta():
-    """A página web consulta essa rota a cada segundo procurando novas interações"""
-    if fila_alertas:
-        return jsonify(fila_alertas.pop(0)) # Remove e entrega o primeiro alerta da fila
+    """
+    Broadcast por ID: cada cliente envia seu ultimo_id (padrão -1).
+    O servidor devolve todos os alertas com id > ultimo_id.
+    Nenhum alerta é removido — cada cliente lê independentemente.
+    """
+    from flask import request as freq
+    try:
+        ultimo_id = int(freq.args.get('ultimo_id', -1))
+    except (ValueError, TypeError):
+        ultimo_id = -1
+
+    novos = [a for a in fila_alertas if a['id'] > ultimo_id]
+    if novos:
+        return jsonify({"alertas": novos, "reproduzir": True})
     return jsonify({"reproduzir": False})
 
 @app.route('/audio')

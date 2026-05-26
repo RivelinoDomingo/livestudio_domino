@@ -276,6 +276,7 @@ soundfile
 requests
 pyopenssl
 betterproto
+emoji
 ```
 
 Gere o `requirements.txt` com:
