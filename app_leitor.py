@@ -1,11 +1,14 @@
 import subprocess
 import os
+import time
 from flask import Flask, render_template_string, request, jsonify, send_from_directory
 
 app = Flask(__name__)
 
 # Caminho para o arquivo de áudio gerado
 AUDIO_FILE = "resultado.wav"
+
+tempo_total = 0
 
 # Interface HTML minimalista e moderna integrada
 HTML_PAGE = """
@@ -138,22 +141,25 @@ HTML_PAGE = """
 </body>
 </html>
 """
-
 @app.route('/')
 def index():
     return render_template_string(HTML_PAGE)
 
 @app.route('/falar', methods=['POST'])
 def falar():
+    global tempo_total
     texto = request.form.get('texto', '')
 
     try:
+        print(f"Recebeu texto: {time.time()}")
+        tempo_total = time.time()
         # Executa o seu arquivo testar_voz.py passando o texto recebido como argumento
         # Usamos o python3 do próprio ambiente virtual
         resultado = subprocess.run(
             ['python3', 'testar_voz.py', texto],
             capture_output=True, text=True, check=True
         )
+
         return jsonify({"sucesso": True})
     except subprocess.CalledProcessError as e:
         return jsonify({"sucesso": False, "erro": e.stderr or str(e)})
@@ -161,6 +167,8 @@ def falar():
 @app.route('/audio')
 def obter_audio():
     # Serve o arquivo .wav gerado para que a página possa reproduzir
+    tempgasto = time.time() - tempo_total
+    print(f"Enviou audio: {time.time()} gastou: {tempgasto:.2f} segundos")
     return send_from_directory(os.getcwd(), AUDIO_FILE)
 
 if __name__ == '__main__':
