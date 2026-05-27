@@ -5,13 +5,14 @@
 //             (/obter_alerta, /audio, Firebase).
 // ============================================================
 
-const CACHE_NAME = 'domino-static-v1';
+const CACHE_NAME = 'domino-static-v1.01';
 
 // Arquivos da /static que queremos pre-cachear na instalação
 const ARQUIVOS_PARA_CACHEAR = [
     '/static/EH_Nois.mp4',
     '/static/DInovo.mp4',
     '/static/manifest.json',
+    '/static/domino_logo.png',
 ];
 
 // Prefixos/URLs que NUNCA devem vir do cache (sempre rede)
