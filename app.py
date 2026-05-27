@@ -68,15 +68,23 @@ historico_mensagens_recentes = []
 # Tempo em segundos para esperar o combo terminar antes da IA falar
 TEMPO_ESPERA_COMBO = 4.0
 
-def get_nickname_from_raw(event) -> str:
+def get_nickname_and_username_from_raw(event) -> tuple[str, str]:
     raw = event.to_pydict(casing=betterproto.Casing.SNAKE)
-    raw_str = str(raw)  # converte tudo pra string
+    raw_str = str(raw)
+    nick = 'Desconhecido'
+    user = 'Desconhecido'
 
-    # Procura nick_name ou nickName seguido do valor
-    match = re.search(r"'nick(?:_?)name':\s*'([^']+)'", raw_str, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    return 'Desconhecido'
+    # Casa: nick_name='valor' ou 'nick_name': 'valor'
+    match_n = re.search(r"nick_?name'?\s*[:=]\s*'([^']+)'", raw_str, re.IGNORECASE)
+    if match_n:
+        nick = match_n.group(1)
+
+    # Casa: username='valor' ou 'username': 'valor'
+    match_u = re.search(r"username'?\s*[:=]\s*'([^']+)'", raw_str, re.IGNORECASE)
+    if match_u:
+        user = match_u.group(1)
+
+    return nick, user
 
 def get_avatar_url(event) -> str:
     """Extrai a primeira URL do avatar do usuário do evento."""
@@ -148,8 +156,7 @@ async def on_connect(event: ConnectEvent):
 
 @client.on(LikeEvent)
 async def on_like(event: LikeEvent):
-    usuario = event.user.unique_id
-    nickname = get_nickname_from_raw(event)[:caracters_nick]
+    nickname, usuario = get_nickname_and_username_from_raw(event)
 
     # print(vars(event.user))
     # try:
@@ -199,8 +206,7 @@ async def on_like(event: LikeEvent):
 @client.on(CommentEvent)
 async def on_comment(event: CommentEvent):
     global contador_ordem_chegada # Avisa o Python para usar a variável global
-    usuario = event.user.unique_id
-    nickname = get_nickname_from_raw(event)[:caracters_nick]
+    nickname, usuario = get_nickname_and_username_from_raw(event)
     mensagem = event.comment
 
     # print(vars(event))
@@ -233,8 +239,7 @@ async def on_comment(event: CommentEvent):
 
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
-    usuario = event.user.unique_id
-    nickname = get_nickname_from_raw(event)[:caracters_nick]
+    nickname, usuario = get_nickname_and_username_from_raw(event)
     avatar_url = get_avatar_url(event)
     gift = event.gift
 
