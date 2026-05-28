@@ -5,7 +5,7 @@
 //             (/obter_alerta, /audio, Firebase).
 // ============================================================
 
-const CACHE_NAME = 'domino-static-v1.01';
+const CACHE_NAME = 'domino-static-v1.02';
 
 // Arquivos da /static que queremos pre-cachear na instalação
 const ARQUIVOS_PARA_CACHEAR = [
@@ -28,6 +28,7 @@ const IGNORAR_SW = [
     '/obter_alerta',
     '/audio',
     '/radio-proxy',
+    '/online_status',
 ];
 
 // ── INSTALL: baixa e armazena os estáticos ──────────────────

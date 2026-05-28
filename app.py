@@ -56,6 +56,7 @@ def limpar_avatares_antigos():
 likes_meme = 200
 caracters_nick = 20
 caracters_coment = 500
+online = False
 
 # Lista de alertas com ID sequencial global.
 # Clientes enviam seu ultimo_id e recebem apenas alertas mais novos.
@@ -178,8 +179,10 @@ def filtrar_texto_para_kokoro(texto_original):
 # --- EVENTOS DO TIKTOK ---
 @client.on(ConnectEvent)
 async def on_connect(event: ConnectEvent):
+    global online
     # 0. Limpa avatares de lives anteriores
     limpar_avatares_antigos()
+    online = True
     print(f"\n=========================================")
     print(f"✅ CONEXÃO ESTABELECIDA COM SUCESSO!")
     print(f"🤖 Monitorando agora a live de: @{event.unique_id}")
@@ -338,6 +341,7 @@ def rodar_tiktok():
     while True:
         try:
             print(f"\n🔍 Verificando se @{TIKTOK_USERNAME} está ao vivo...")
+            online = True
             client.run(fetch_gift_info=True)
             # Se chegou aqui, a live encerrou normalmente
             print(f"\n📴 Live de @{TIKTOK_USERNAME} encerrada. Aguardando nova live...")
@@ -347,12 +351,14 @@ def rodar_tiktok():
             erro = str(e).lower()
             if 'not live' in erro or 'not found' in erro or 'offline' in erro:
                 # Contagem regressiva linear em uma única linha
+                online = False
                 for i in range(intervalo_atual, 0, -1):
                     print(f"\r⏳ @{TIKTOK_USERNAME} não está ao vivo. Tentando novamente em {i}s...", end='', flush=True)
                     time.sleep(1)
                 print()  # Quebra a linha após a contagem terminar
             else:
                 # Erro inesperado (rede, servidor de assinatura, etc.) — backoff exponencial
+                online = False
                 print(f"\n⚠️ Erro de conexão: {e}")
                 print(f"🔄 Reconectando em {intervalo_atual}s...")
                 intervalo_atual = min(intervalo_atual * 2, INTERVALO_MAXIMO)
@@ -418,6 +424,14 @@ def obter_alerta():
     if novos:
         return jsonify({"alertas": novos, "reproduzir": True})
     return jsonify({"reproduzir": False})
+
+@app.route('/online_status')
+def online_status():
+    global online
+    if online:
+        return jsonify({"online": True})
+    else:
+        return jsonify({"online": False})
 
 @app.route('/audio')
 def obter_audio():
