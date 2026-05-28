@@ -757,6 +757,7 @@
         let bannerAtivo   = false;       // true enquanto o banner estiver visível
         let tipoAtivo     = null;        // 'gift' | 'like' | null
         let timerBanner   = null;        // referência do setTimeout atual
+        let timerFim      = 0;           // timestamp (ms) em que o banner vai fechar
 
         const DURACAO = { gift: 10000, like: 13000 };
         const CONFIG  = {
@@ -804,6 +805,7 @@
             timerBanner = setTimeout(() => {
                 fecharBanner();
             }, DURACAO[tipo]);
+            timerFim = Date.now() + DURACAO[tipo];
 
             atualizarInfoFila();
         }
@@ -844,10 +846,16 @@
             }
 
             if (tipo === tipoAtivo) {
-                // Mesmo tipo → atualiza só o texto, reinicia timer
+                // Mesmo tipo → atualiza o texto e garante mínimo de 3s de exibição.
+                // Se o timer restante for maior que 3s, mantém; se for menor, estica para 3s.
                 document.getElementById('banner-texto').textContent = mensagem;
-                // if (timerBanner) clearTimeout(timerBanner);
-                // timerBanner = setTimeout(fecharBanner, DURACAO[tipo]);
+                const MINIMO_MS = 3000;
+                const tempoRestante = timerBanner ? (timerFim - Date.now()) : 0;
+                if (tempoRestante < MINIMO_MS) {
+                    if (timerBanner) clearTimeout(timerBanner);
+                    timerBanner = setTimeout(fecharBanner, MINIMO_MS);
+                    timerFim = Date.now() + MINIMO_MS;
+                }
                 return;
             }
 

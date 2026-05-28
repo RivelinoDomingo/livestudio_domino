@@ -37,6 +37,22 @@ client = TikTokLiveClient(unique_id=TIKTOK_USERNAME)
 
 AUDIO_FILE = "resultado.wav"
 
+AVATARES_DIR = os.path.join('static', 'avatares')
+cache_avatares = {}  # { unique_id: "/static/avatares/avt_<id>.webp" }
+
+def limpar_avatares_antigos():
+    os.makedirs(AVATARES_DIR, exist_ok=True)
+    removidos = 0
+    for f in os.listdir(AVATARES_DIR):
+        if f.startswith('avt_'):
+            try:
+                os.remove(os.path.join(AVATARES_DIR, f))
+                removidos += 1
+            except Exception:
+                pass
+    if removidos:
+        print(f"🗑️ {removidos} avatar(es) antigo(s) removido(s).")
+
 likes_meme = 200
 caracters_nick = 20
 caracters_coment = 500
@@ -86,8 +102,11 @@ def get_nickname_and_username_from_raw(event) -> tuple[str, str]:
 
     return nick, user
 
-def get_avatar_url(event) -> str:
-    """Extrai a primeira URL do avatar do usuário do evento."""
+def get_avatar_url(event, unique_id: str) -> str:
+    """Baixa o avatar do evento e retorna a URL local /static/avatares/avt_<id>.webp.
+    Usa cache em memória para não baixar o mesmo avatar duas vezes por live."""
+    if unique_id in cache_avatares:
+        return cache_avatares[unique_id]
     try:
         user = event.user
         raw = user.to_pydict(casing=betterproto.Casing.SNAKE)
@@ -97,13 +116,23 @@ def get_avatar_url(event) -> str:
             raw.get('avatar_larger', {}).get('m_urls') or
             []
         )
-        # Prefere .webp; pega a primeira disponível
-        for url in urls:
-            if url:
-                return url
-        return ''
-    except Exception:
-        return ''
+        url_remota = next((u for u in urls if u), '')
+        if not url_remota:
+            return ''
+        ext = 'webp' if 'webp' in url_remota else 'jpeg'
+        nome = f"avt_{unique_id}.{ext}"
+        caminho = os.path.join(AVATARES_DIR, nome)
+        resp = requests.get(url_remota, timeout=5, headers={'User-Agent': 'Mozilla/5.0'})
+        if resp.status_code == 200:
+            with open(caminho, 'wb') as f:
+                f.write(resp.content)
+            url_local = f"/static/avatares/{nome}"
+            cache_avatares[unique_id] = url_local
+            print(f"🖼️ Avatar salvo: {url_local}")
+            return url_local
+    except Exception as e:
+        print(f"⚠️ Erro ao baixar avatar de {unique_id}: {e}")
+    return ''
 
 
 def monitorar_e_enviar_combo(usuario):
@@ -149,6 +178,8 @@ def filtrar_texto_para_kokoro(texto_original):
 # --- EVENTOS DO TIKTOK ---
 @client.on(ConnectEvent)
 async def on_connect(event: ConnectEvent):
+    # 0. Limpa avatares de lives anteriores
+    limpar_avatares_antigos()
     print(f"\n=========================================")
     print(f"✅ CONEXÃO ESTABELECIDA COM SUCESSO!")
     print(f"🤖 Monitorando agora a live de: @{event.unique_id}")
@@ -240,7 +271,7 @@ async def on_comment(event: CommentEvent):
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
     nickname, usuario = get_nickname_and_username_from_raw(event)
-    avatar_url = get_avatar_url(event)
+    avatar_url = get_avatar_url(event, usuario)
     gift = event.gift
 
     if gift is None:
@@ -461,6 +492,7 @@ def encerrar_sistema_graciosamente(sinal, frame):
 signal.signal(signal.SIGINT, encerrar_sistema_graciosamente)
 
 if __name__ == '__main__':
+
     # 1. Thread 1: Escuta o TikTok
     thread_tiktok = threading.Thread(target=rodar_tiktok, daemon=True)
     thread_tiktok.start()
