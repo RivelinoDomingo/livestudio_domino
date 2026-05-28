@@ -337,24 +337,34 @@ def rodar_tiktok():
 
     while True:
         try:
-            print(f"🔍 Verificando se @{TIKTOK_USERNAME} está ao vivo...")
+            print(f"\n🔍 Verificando se @{TIKTOK_USERNAME} está ao vivo...")
             client.run(fetch_gift_info=True)
             # Se chegou aqui, a live encerrou normalmente
-            print(f"📴 Live de @{TIKTOK_USERNAME} encerrada. Aguardando nova live...")
+            print(f"\n📴 Live de @{TIKTOK_USERNAME} encerrada. Aguardando nova live...")
             intervalo_atual = INTERVALO_INICIAL  # reseta o backoff após conexão bem-sucedida
 
         except Exception as e:
             erro = str(e).lower()
             if 'not live' in erro or 'not found' in erro or 'offline' in erro:
-                print(f"⏳ @{TIKTOK_USERNAME} não está ao vivo. Tentando novamente em {intervalo_atual}s...")
+                # Contagem regressiva linear em uma única linha
+                for i in range(intervalo_atual, 0, -1):
+                    print(f"\r⏳ @{TIKTOK_USERNAME} não está ao vivo. Tentando novamente em {i}s...", end='', flush=True)
+                    time.sleep(1)
+                print()  # Quebra a linha após a contagem terminar
             else:
                 # Erro inesperado (rede, servidor de assinatura, etc.) — backoff exponencial
-                print(f"⚠️ Erro de conexão: {e}")
+                print(f"\n⚠️ Erro de conexão: {e}")
                 print(f"🔄 Reconectando em {intervalo_atual}s...")
                 intervalo_atual = min(intervalo_atual * 2, INTERVALO_MAXIMO)
 
-        time.sleep(intervalo_atual)
+                # Contagem regressiva linear também para erros inesperados
+                for i in range(intervalo_atual, 0, -1):
+                    print(f"\r🔄 Reconectando em {i}s...", end='', flush=True)
+                    time.sleep(1)
+                print()  # Quebra a linha após a contagem terminar
+                continue
 
+        time.sleep(intervalo_atual)
 
 
 def processador_de_audio():
