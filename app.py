@@ -325,13 +325,35 @@ def push_alerta(alerta: dict):
 
 # --- CONFIGURAÇÃO DA THREAD DO TIKTOK ---
 def rodar_tiktok():
-    """Função rodada em uma thread separada para escutar o TikTok continuamente"""
+    """
+    Tenta conectar à live em loop. Se a live estiver offline ou cair,
+    aguarda e tenta novamente — sem precisar reiniciar o app.
+    """
     asyncio.set_event_loop(asyncio.new_event_loop())
-    try:
-        print(f"🤖 Linha do TikTok ativada para: @{TIKTOK_USERNAME}")
-        client.run(fetch_gift_info=True)
-    except Exception as e:
-        print(f"Conexão do TikTok encerrada ou indisponível: {e}")
+
+    INTERVALO_INICIAL   = 30   # segundos entre tentativas quando offline
+    INTERVALO_MAXIMO    = 300  # nunca esperar mais que 5 minutos
+    intervalo_atual     = INTERVALO_INICIAL
+
+    while True:
+        try:
+            print(f"🔍 Verificando se @{TIKTOK_USERNAME} está ao vivo...")
+            client.run(fetch_gift_info=True)
+            # Se chegou aqui, a live encerrou normalmente
+            print(f"📴 Live de @{TIKTOK_USERNAME} encerrada. Aguardando nova live...")
+            intervalo_atual = INTERVALO_INICIAL  # reseta o backoff após conexão bem-sucedida
+
+        except Exception as e:
+            erro = str(e).lower()
+            if 'not live' in erro or 'not found' in erro or 'offline' in erro:
+                print(f"⏳ @{TIKTOK_USERNAME} não está ao vivo. Tentando novamente em {intervalo_atual}s...")
+            else:
+                # Erro inesperado (rede, servidor de assinatura, etc.) — backoff exponencial
+                print(f"⚠️ Erro de conexão: {e}")
+                print(f"🔄 Reconectando em {intervalo_atual}s...")
+                intervalo_atual = min(intervalo_atual * 2, INTERVALO_MAXIMO)
+
+        time.sleep(intervalo_atual)
 
 
 

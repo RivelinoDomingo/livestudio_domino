@@ -504,7 +504,7 @@
             <!-- Vídeo centralizado -->
             <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-55%); text-align:center;">
                 <video id="meme-video" playsinline
-                       style="max-width:84vh; max-height:52vw; border-radius:10px; display:block;"></video>
+                       style="max-width:84vh; max-height:36vw; border-radius:10px; display:block;"></video>
             </div>
             <!-- Texto ancorado na parte inferior -->
             <div id="banner-texto-container" style="
@@ -986,7 +986,7 @@
             }, DURACAO[tipo]);
             timerFim = Date.now() + DURACAO[tipo];
 
-            atualizarInfoFila();
+            // atualizarInfoFila();
         }
 
         function fecharBanner() {
@@ -995,7 +995,7 @@
             bannerAtivo = false;
             tipoAtivo   = null;
             timerBanner = null;
-            atualizarInfoFila();
+            // atualizarInfoFila();
             // Processa próximo da fila se houver
             processarFila();
         }
@@ -1040,7 +1040,7 @@
 
             // Caso contrário (like chegou enquanto gift toca) → enfileira
             filaAlertas.push({ tipo, mensagem, prioridade });
-            atualizarInfoFila();
+            //atualizarInfoFila();
         }
 
         // ── ALERTAS TTS / PRESENTES / LIKES ──────────────────────
