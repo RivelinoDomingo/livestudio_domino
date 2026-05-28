@@ -107,7 +107,7 @@
             backdrop-filter: blur(5px);
             -webkit-backdrop-filter: blur(5px);
             border-radius: 10px;
-            padding: 12px;
+            padding: 5px;
             width: 160px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.7);
             border-left: 5px solid #00b37e;
@@ -128,76 +128,6 @@
             height: 22px;
             vertical-align: middle;
             margin-right: 8px;
-        }
-
-        /* --- LISTA DE DOADORES --- */
-        #doadores-container {
-            position: absolute;
-            top: 235px;
-            left: 5px;
-            display: flex;
-            flex-direction: column;
-            gap: 1px;
-        }
-
-        .doador-card {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            background: rgba(18, 18, 20, 0.5);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
-            border-radius: 20px;
-            padding: 4px 10px 4px 4px;
-            border: 1px solid rgba(255, 179, 126, 0.3);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-            animation: slideIn 0.3s ease;
-        }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-12px); }
-            to   { opacity: 1; transform: translateX(0); }
-        }
-
-        .doador-posicao {
-            font-size: 10px;
-            color: #ff9f43;
-            font-weight: bold;
-            min-width: 14px;
-            text-align: center;
-        }
-
-        .doador-avatar {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 1.5px solid #ff9f43;
-            background: #2e2e35;
-            flex-shrink: 0;
-        }
-
-        .doador-avatar-fallback {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #ff9f43, #ff6b35);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 13px;
-            flex-shrink: 0;
-            border: 1.5px solid #ff9f43;
-        }
-
-        .doador-nick {
-            font-size: 11px;
-            font-weight: bold;
-            color: #fff;
-            max-width: 90px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
 
         .jogador-item {
@@ -322,6 +252,209 @@
             z-index: 200;
         }
         #debug-painel b { color: #fff; }
+
+        /* =====================================================
+           BANNER CLASSIFICAÇÃO — parte inferior da tela
+        ===================================================== */
+        #banner-classificacao {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            z-index: 100;
+            display: flex;
+            align-items: stretch;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        /* Metade esquerda e direita — trilha rolante */
+        .banner-half {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            background: linear-gradient(90deg, rgba(10,10,18,0.88), rgba(20,20,36,0.82));
+            border-top: 1.5px solid rgba(0,179,126,0.45);
+            display: flex;
+            align-items: center;
+        }
+        .banner-half::before,
+        .banner-half::after {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 28px;
+            z-index: 2;
+            pointer-events: none;
+        }
+        #banner-left::before  { left: 0;  background: linear-gradient(to right, rgba(10,10,18,0.9), transparent); }
+        #banner-left::after   { right: 0; background: linear-gradient(to left,  rgba(10,10,18,0.9), transparent); }
+        #banner-right::before { left: 0;  background: linear-gradient(to right, rgba(10,10,18,0.9), transparent); }
+        #banner-right::after  { right: 0; background: linear-gradient(to left,  rgba(10,10,18,0.9), transparent); }
+
+        .banner-scroll-track {
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+            animation: banner-scroll 45s linear infinite;
+            will-change: transform;
+        }
+        .banner-scroll-track:hover { animation-play-state: paused; }
+
+        /* Esquerda rola →←, direita rola ←→ para efeito espelhado */
+        #banner-right .banner-scroll-track {
+            animation-direction: reverse;
+        }
+
+        @keyframes banner-scroll {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* Item individual */
+        .bc-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 0 18px;
+            border-right: 1px solid rgba(255,255,255,0.08);
+            font-size: 11px;
+            color: #c8d6e5;
+            line-height: 1;
+        }
+        .bc-serie {
+            font-size: 9px;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 3px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .bc-pos   { font-weight: 700; font-size: 11px; min-width: 18px; }
+        .bc-name  { font-weight: 700; color: #fff; font-size: 12px; }
+        .bc-stat  { color: #7f8c9a; font-size: 10px; }
+        .bc-stat b { color: #b8c8d8; font-weight: 600; }
+
+        /* Separador de série */
+        .bc-divider {
+            display: inline-flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 5px;
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            border-right: 1.5px solid rgba(0,179,126,0.3);
+        }
+
+        /* Relógio central */
+        #banner-clock {
+            flex-shrink: 0;
+            width: 80px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.7);
+            border-top: 1.5px solid #00b37e;
+            border-left:  1px solid rgba(0,179,126,0.3);
+            border-right: 1px solid rgba(0,179,126,0.3);
+            gap: 1px;
+            position: relative;
+            z-index: 5;
+        }
+        #clock-time {
+            font-size: 17px;
+            font-weight: 700;
+            color: #00b37e;
+            letter-spacing: 1px;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            font-family: 'Courier New', monospace;
+        }
+        #clock-date {
+            font-size: 8px;
+            color: #4a6070;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        #clock-label {
+            font-size: 7px;
+            color: #1a4030;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        /* --- LISTA DE DOADORES --- */
+        #doadores-container {
+            position: absolute;
+            top: 218px;
+            left: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+            z-index: 101;
+        }
+
+        .doador-card {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(18, 18, 20, 0.5);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            border-radius: 20px;
+            padding: 4px 10px 4px 4px;
+            border: 1px solid rgba(255, 179, 126, 0.3);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-12px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+
+        .doador-posicao {
+            font-size: 10px;
+            color: #ff9f43;
+            font-weight: bold;
+            min-width: 14px;
+            text-align: center;
+        }
+
+        .doador-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid #ff9f43;
+            background: #2e2e35;
+            flex-shrink: 0;
+        }
+
+        .doador-avatar-fallback {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ff9f43, #ff6b35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            flex-shrink: 0;
+            border: 1.5px solid #ff9f43;
+        }
+
+        .doador-nick {
+            font-size: 11px;
+            font-weight: bold;
+            color: #fff;
+            max-width: 90px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 
     <script>
@@ -431,6 +564,32 @@
             resizeMode: <span id="d-resize">—</span><br>
             screen.orient: <span id="d-screen-orient">—</span><br>
             DPR: <span id="d-dpr">—</span>
+        </div>
+
+        <!-- ── BANNER CLASSIFICAÇÃO ── -->
+        <div id="banner-classificacao">
+
+            <!-- Metade esquerda -->
+            <div class="banner-half" id="banner-left">
+                <div class="banner-scroll-track" id="scroll-left">
+                    <span class="bc-item" style="color:#4a6070">⏳ carregando…</span>
+                </div>
+            </div>
+
+            <!-- Relógio central -->
+            <div id="banner-clock">
+                <div id="clock-time">--:--</div>
+                <div id="clock-date">---</div>
+                <div id="clock-label">🔴 ao vivo</div>
+            </div>
+
+            <!-- Metade direita -->
+            <div class="banner-half" id="banner-right">
+                <div class="banner-scroll-track" id="scroll-right">
+                    <span class="bc-item" style="color:#4a6070">⏳ carregando…</span>
+                </div>
+            </div>
+
         </div>
 
     </div><!-- fim #overlay-rotacionado -->
@@ -622,12 +781,32 @@
         function ativarTelaCheia() {
             const el = document.documentElement;
             if (!document.fullscreenElement) {
-                (el.requestFullscreen || el.mozRequestFullScreen ||
-                 el.webkitRequestFullscreen || el.msRequestFullscreen).call(el);
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(() => {});
+                }
+                const fn = el.requestFullscreen || el.mozRequestFullScreen ||
+                        el.webkitRequestFullscreen || el.msRequestFullscreen;
+                if (fn) {
+                    fn.call(el).catch(err => console.warn('Fullscreen:', err));
+                }
             } else {
                 (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+                if (screen.orientation && screen.orientation.unlock) {
+                    screen.orientation.unlock();
+                }
             }
         }
+
+        // Garante que ao entrar em fullscreen a orientação landscape seja travada.
+        // O evento 'fullscreenchange' dispara depois que o fullscreen é concedido,
+        // que é o momento certo para o lock funcionar no Android com overlay ativo.
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) {
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(() => {});
+                }
+            }
+        });
 
         function alternarDebug() {
             debugVisivel = !debugVisivel;
@@ -902,6 +1081,174 @@
                 }
             } catch (err) {}
         }
+
+        // ── RELÓGIO ───────────────────────────────────────────────
+        function tickClock() {
+            const now  = new Date();
+            const hh   = String(now.getHours()).padStart(2,'0');
+            const mm   = String(now.getMinutes()).padStart(2,'0');
+            const ss   = String(now.getSeconds()).padStart(2,'0');
+            const dias = ['DOM','SEG','TER','QUA','QUI','SEX','SÁB'];
+            const dd   = String(now.getDate()).padStart(2,'0');
+            const mo   = String(now.getMonth()+1).padStart(2,'0');
+            document.getElementById('clock-time').textContent = `${hh}:${mm}:${ss}`;
+            document.getElementById('clock-date').textContent =
+                `${dias[now.getDay()]} ${dd}/${mo}`;
+        }
+        tickClock();
+        setInterval(tickClock, 1000);
+
+        // ── BANNER CLASSIFICAÇÃO (Firebase REST — sem SDK) ────────
+        (async function initBannerClassificacao() {
+
+            const PROJECT   = "placar-domino";
+            const APP_ID    = "1:187178310074:web:5f56292dea8dc776532583";
+            const BASE_PATH = `artifacts/${APP_ID}/public/data/players`;
+            const API_BASE  = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+
+            const SERIE_ORDER  = ['A','B','C','D','Amador'];
+            const SERIE_COLOR  = { A:'#ef4444', B:'#f97316', C:'#22c55e', D:'#3b82f6', Amador:'#a855f7' };
+            const POS_EMOJI    = { 1:'🥇', 2:'🥈', 3:'🥉' };
+
+            // Detecta temporada mais alta (ex: "temporada_10" → 10)
+            function detectarTemporadaAtual(docs) {
+                let max = 0;
+                for (const doc of docs) {
+                    const fields = doc.fields || {};
+                    for (const key of Object.keys(fields)) {
+                        if (key.startsWith('temporada_')) {
+                            const n = parseInt(key.replace('temporada_',''), 10);
+                            if (!isNaN(n) && n > max) max = n;
+                        }
+                    }
+                }
+                return `temporada_${max}`;
+            }
+
+            // Lê valor de um campo Firestore (int ou double ou string)
+            function fv(field) {
+                if (!field) return 0;
+                if (field.integerValue !== undefined) return Number(field.integerValue);
+                if (field.doubleValue  !== undefined) return Number(field.doubleValue);
+                if (field.stringValue  !== undefined) return field.stringValue;
+                return 0;
+            }
+
+            async function fetchClassificacao() {
+                // Firestore REST list — pageSize máx 300 para pegar todos de uma vez
+                const url = `${API_BASE}/${BASE_PATH}?pageSize=300`;
+                const res  = await fetch(url);
+                const json = await res.json();
+                const docs = json.documents || [];
+
+                if (!docs.length) return {};
+
+                const temporada = detectarTemporadaAtual(docs);
+                const ligas     = {};
+
+                for (const doc of docs) {
+                    const f      = doc.fields || {};
+                    const stats  = f[temporada]?.mapValue?.fields || {};
+                    const partiadas = fv(stats.partidasNaTemporada);
+                    if (!partiadas) continue; // sem jogos na temporada atual
+
+                    const serie = fv(f.series) || fv(f.serie) || 'D';
+
+                    if (!ligas[serie]) ligas[serie] = [];
+                    ligas[serie].push({
+                        name:          fv(f.name) || '—',
+                        series:        String(serie),
+                        aproveitamento: Number(fv(stats.aproveitamentoNaTemporada)) || 0,
+                        pontos:         Number(fv(stats.pontosNaTemporada))         || 0,
+                        lambretas:      Number(fv(stats.lambretasNaTemporada))      || 0,
+                        raios:          Number(fv(stats.raiosNaTemporada))          || 0,
+                        partidas:       Number(partiadas),
+                    });
+                }
+
+                // Ordena cada série: aproveitamento → pontos → menos lambretas
+                for (const s of Object.keys(ligas)) {
+                    ligas[s].sort((a,b) => {
+                        const d1 = b.aproveitamento - a.aproveitamento;
+                        if (d1 !== 0) return d1;
+                        const d2 = b.pontos - a.pontos;
+                        if (d2 !== 0) return d2;
+                        return a.lambretas - b.lambretas;
+                    });
+                }
+
+                return ligas;
+            }
+
+            function buildItems(ligas) {
+                const items = [];
+                for (const serie of SERIE_ORDER) {
+                    const players = ligas[serie];
+                    if (!players || !players.length) continue;
+                    const cor = SERIE_COLOR[serie] || '#3b82f6';
+
+                    // separador de série
+                    items.push(
+                        `<span class="bc-divider" style="color:${cor};border-right-color:${cor}44">
+                            ◆ SÉRIE ${serie}
+                        </span>`
+                    );
+
+                    players.forEach((p, i) => {
+                        const pos   = i + 1;
+                        // const emoji = POS_EMOJI[pos] || `${pos}º`;
+                        const pos_f = `${pos}º`
+                        const aprov = p.aproveitamento.toFixed(1);
+                        items.push(
+                            `<span class="bc-item">
+                                <span class="bc-serie" style="background:${cor}22;color:${cor};border:1px solid ${cor}44">${serie}</span>
+                                <span class="bc-pos" style="color:${cor}">${pos_f}</span>
+                                <span class="bc-name">${p.name}</span>
+                                <span class="bc-stat"><b>${aprov}%</b> · ⚡<b>${p.raios}</b> · 🛵<b>${p.lambretas}</b></span>
+                            </span>`
+                        );
+                    });
+                }
+                return items;
+            }
+
+            function renderBanner(ligas) {
+                const items = buildItems(ligas);
+                if (!items.length) return;
+
+                // Divide ao meio: primeira metade → left, segunda → right
+                const meio    = Math.ceil(items.length / 2);
+                const esq     = items.slice(0, meio);
+                const dir     = items.slice(meio);
+
+                // Duplica cada metade para loop suave contínuo
+                const htmlEsq = esq.join('') + esq.join('');
+                const htmlDir = dir.length ? dir.join('') + dir.join('')
+                                           : esq.join('') + esq.join(''); // fallback: repete esquerda
+
+                document.getElementById('scroll-left').innerHTML  = htmlEsq;
+                document.getElementById('scroll-right').innerHTML = htmlDir;
+
+                // Ajusta velocidade por tamanho do conteúdo
+                const totalPlayers = Object.values(ligas).flat().length;
+                const dur = Math.max(35, totalPlayers * 5);
+                document.querySelectorAll('.banner-scroll-track').forEach(el => {
+                    el.style.animationDuration = dur + 's';
+                });
+            }
+
+            async function atualizar() {
+                try {
+                    const ligas = await fetchClassificacao();
+                    renderBanner(ligas);
+                } catch(e) {
+                    console.warn('[banner-classificacao] erro:', e);
+                }
+            }
+
+            atualizar();
+            setInterval(atualizar, 5 * 60 * 1000); // atualiza a cada 5 min
+        })();
 
         // ── INIT ──────────────────────────────────────────────────
         window.onload = () => {
