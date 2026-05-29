@@ -1,18 +1,28 @@
 import soundfile as sf
 import argparse
+import time
 # Mudança sutil na importação para a versão v1.0
 from kokoro_onnx import Kokoro
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Converte texo em voz')
     parser.add_argument('texto', help='Texto a ser falado.')
+    parser.add_argument('-m', '--modelo', action='store_true', help='Muda para modelo menor int8 82M.')
+    parser.add_argument('-d', '--debug', action='store_true', help='Ativa modo depuração')
     return parser.parse_args()
-    
-texto = parse_arguments().texto    
-    
+
+texto = parse_arguments().texto
+
 # print("Carregando o modelo Kokoro v1.0...")
-onnx_file = "kokoro-v1.0.onnx"
+if parse_arguments().modelo:
+    onnx_file = "kokoro-v1.0.int8.onnx"
+else:
+    onnx_file = "kokoro-v1.0.onnx"
+
 voices_file = "voices-v1.0.bin"
+
+if parse_arguments().debug:
+    start_at = time.time()
 
 # Instancia usando a nova classe 'Kokoro'
 kokoro = Kokoro(onnx_file, voices_file)
@@ -25,12 +35,14 @@ kokoro = Kokoro(onnx_file, voices_file)
 samples, sample_rate = kokoro.create(
     text=texto,
     voice="pm_santa",
-    speed=0.9,
+    speed=0.8,
     lang="pt-br"
 )
 
 # Salva o resultado
 nome_arquivo = "resultado.wav"
 sf.write(nome_arquivo, samples, sample_rate)
+if parse_arguments().debug:
+    print(f"Usando modelo {onnx_file} | com duração de {(time.time() - start_at):.1f} segundos")
 # print(f"Sucesso! Áudio gravado com sucesso em: {nome_arquivo}")
 

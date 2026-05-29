@@ -151,7 +151,7 @@ def falar():
     texto = request.form.get('texto', '')
 
     try:
-        print(f"Recebeu texto: {time.time()}")
+        print(f"Recebeu texto de {len(texto)} caracteres")
         tempo_total = time.time()
         # Executa o seu arquivo testar_voz.py passando o texto recebido como argumento
         # Usamos o python3 do próprio ambiente virtual
@@ -161,7 +161,7 @@ def falar():
         )
 
         tempgasto = time.time() - tempo_total
-        print(f"Processou audio: {time.time()} gastou: [{tempgasto:.2f} segundos]")
+        print(f"Processou audio em: [{tempgasto:.2f} segundos]")
         return jsonify({"sucesso": True})
     except subprocess.CalledProcessError as e:
         return jsonify({"sucesso": False, "erro": e.stderr or str(e)})
