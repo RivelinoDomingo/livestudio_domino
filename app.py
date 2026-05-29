@@ -24,13 +24,25 @@ log.setLevel(logging.ERROR)  # Só vai mostrar mensagens na tela se for um ERRO 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='App de leitura de mensagens e presentes de lives do tiktok')
     # O nargs='?' diz ao Python que o argumento é opcional
-    parser.add_argument('user', type=str, nargs='?', default='rivellinodomingo', help='Nome do usuario, que voce quer monitorar a live.')
+    parser.add_argument('user', type=str, nargs='?', default='rivellinodomingo',
+                        help='Nome do usuario, que voce quer monitorar a live.')
+    parser.add_argument('--engine', action='store_true',
+                        help='Engine de TTS a usar: "kokoro" (local, padrão) ou "voicerss" (API online).')
     return parser.parse_args()
 
 app = Flask(__name__)
 
-# CONFIGURAÇÃO DO TIKTOK (Coloque o @ que você quer monitorar)
-TIKTOK_USERNAME = parse_arguments().user
+# CONFIGURAÇÃO DO TIKTOK E ENGINE DE VOZ
+_args = parse_arguments()
+TIKTOK_USERNAME = _args.user
+TTS_ENGINE = None                                     # 'kokoro' ou 'voicerss'
+VOICERSS_API_KEY = "678317e2fc784d6385a06ecac434d610" # chave da API VoiceRSS
+
+if _args.engine:
+    TTS_ENGINE = "voicerss"
+else:
+    TTS_ENGINE = "kokoro"
+
 client = TikTokLiveClient(unique_id=TIKTOK_USERNAME)
 
 # sys.exit(0)
@@ -206,7 +218,7 @@ async def on_like(event: LikeEvent):
         })
 
 unico_print = True
-time_print = 0.0
+time_print = time.time()
 msg_actual = False
 
 @client.on(CommentEvent)
@@ -224,7 +236,20 @@ async def on_comment(event: CommentEvent):
     # except Exception as e:
     #     print("Erro ao ler user_info:", e)
     # sys.exit(0)
-    if not unico_print and msg_actual:
+
+    if unico_print:
+        unico_print = False
+        time_print = time.time()
+        print('Mensagens pré carregadas que não serão enviadas ao kokoro')
+        print('---------------------------------------------------------')
+    if ((time.time() - time_print) <= 4):
+        print(f"[{time.time()}][{nickname}][@{usuario}]: {mensagem}")
+    else:
+        print('---------------------------------------------------------\n')
+        msg_actual = True
+
+
+    if msg_actual:
         print(f"[{nickname}][@{usuario}]: {mensagem}")
         chave_mensagem = f"{usuario}:{mensagem}"
         if chave_mensagem in historico_mensagens_recentes:
@@ -243,17 +268,7 @@ async def on_comment(event: CommentEvent):
         contador_ordem_chegada += 1
         # A estrutura agora é: (Prioridade, Contador, Texto)
         fila_processamento_tts.put((2, contador_ordem_chegada, texto_para_ia))
-    else:
-        if unico_print:
-            unico_print = False
-            time_print = time.time()
-            print('Mensagens pré carregadas que não serão enviadas ao kokoro')
-            print('---------------------------------------------------------')
-        if ((time.time() - time_print) <= 2):
-            print(f"[{time.time()}][{nickname}][@{usuario}]: {mensagem}")
-        else:
-            print('---------------------------------------------------------')
-            msg_actual = True
+
 
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
@@ -357,20 +372,67 @@ def rodar_tiktok():
         time.sleep(intervalo_atual)
 
 
+def gerar_audio_voicerss(texto: str) -> bool:
+    """
+    Chama a API VoiceRSS para gerar áudio em pt-br com a voz Denis (codec WAV)
+    e salva em resultado.wav. Retorna True em caso de sucesso, False em falha.
+    """
+    try:
+        resp = requests.post(
+            'https://api.voicerss.org/',
+            data={
+                'key': VOICERSS_API_KEY,
+                'hl':  'pt-br',
+                'v':   'Dinis',
+                'src': texto,
+                'c':   'WAV',
+                'f':   '44khz_16bit_stereo',
+            },
+            timeout=15,
+        )
+        # A API retorna erro como texto puro começando com "ERROR"
+        if resp.status_code != 200 or resp.content[:5] == b'ERROR':
+            mensagem_erro = resp.text[:200] if resp.text else f"HTTP {resp.status_code}"
+            print(f"❌ [VoiceRSS] Erro na API: {mensagem_erro}")
+            return False
+
+        with open(AUDIO_FILE, 'wb') as f:
+            f.write(resp.content)
+        return True
+
+    except requests.exceptions.Timeout:
+        print("❌ [VoiceRSS] Timeout ao chamar a API.")
+        return False
+    except Exception as e:
+        print(f"❌ [VoiceRSS] Erro inesperado: {e}")
+        return False
+
+
 def processador_de_audio():
+    engine_label = "🌐 VoiceRSS" if TTS_ENGINE == 'voicerss' else "🤖 Kokoro"
     while True:
-        # CORREÇÃO AQUI: Agora desempacota 3 variáveis (recebe o 'contador' no meio) e flitramos emojis
+        # Desempacota 3 variáveis (prioridade, contador de desempate, texto) e filtra emojis
         prioridade, contador, texto_filt = fila_processamento_tts.get()
         texto_para_ia = filtrar_texto_para_kokoro(texto_filt)
 
         tempo_start = time.time()
         status_prio = "⚡ PRESENTE" if prioridade == 1 else "💬 CHAT"
-        print(f"⚙️ [{status_prio}] Processando áudio agora: '{texto_para_ia}'")
+        print(f"⚙️ [{status_prio}][{engine_label}] Processando áudio: '{texto_para_ia}'")
 
         try:
-            subprocess.run(['python3', 'testar_voz.py', texto_para_ia], check=True)
-            push_alerta({"tipo": "tts", "reproduzir": True})
-            print(f"✅ Áudio processado em {time.time() - tempo_start} segundos... Enviado para o navegador!\n")
+            sucesso = False
+
+            if TTS_ENGINE == 'voicerss':
+                sucesso = gerar_audio_voicerss(texto_para_ia)
+            else:
+                subprocess.run(['python3', 'testar_voz.py', texto_para_ia], check=True)
+                sucesso = True
+
+            if sucesso:
+                push_alerta({"tipo": "tts", "reproduzir": True})
+                print(f"✅ [{engine_label}] Áudio pronto em {time.time() - tempo_start:.2f}s — enviado ao navegador!\n")
+            else:
+                print(f"⚠️ [{engine_label}] Falha na geração de áudio — alerta TTS ignorado.")
 
         except subprocess.CalledProcessError:
             print("⚠️ Geração de áudio interrompida ou falhou.")
@@ -527,12 +589,14 @@ if __name__ == '__main__':
     thread_tiktok = threading.Thread(target=rodar_tiktok, daemon=True)
     thread_tiktok.start()
 
-    # 2. Thread 2: Processa o Kokoro de forma isolada (NOVO)
+    # 2. Thread 2: Processa o áudio de forma isolada
     thread_audio = threading.Thread(target=processador_de_audio, daemon=True)
     thread_audio.start()
 
     # 3. Inicia o Flask
-    print("🚀 Servidor da Live iniciado em http://localhost:5000")
+    engine_info = f"VoiceRSS (voz: Denis, pt-br)" if TTS_ENGINE == 'voicerss' else "Kokoro (local)"
+    print(f"🚀 Servidor da Live iniciado em https://localhost:5000")
+    print(f"🎤 Engine de TTS: {engine_info}")
     # app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
     # Com ssl_context do pacote pip pyopenssl
     app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, ssl_context='adhoc')

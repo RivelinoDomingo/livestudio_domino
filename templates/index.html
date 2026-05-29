@@ -595,8 +595,34 @@
     </div><!-- fim #overlay-rotacionado -->
 
     <script>
-        let audioTTS     = new Audio();
-        let streamAtual  = null;
+        let audioTTS        = new Audio();
+        let streamAtual     = null;
+        const filaTTS       = [];   // fila de timestamps de requisições de áudio TTS
+        let ttsRodando      = false;
+
+        function enfileirarTTS(timestamp) {
+            filaTTS.push(timestamp);
+            if (!ttsRodando) processarFilaTTS();
+        }
+
+        function processarFilaTTS() {
+            if (filaTTS.length === 0) { ttsRodando = false; return; }
+            ttsRodando = true;
+            const ts = filaTTS.shift();
+            audioTTS.src = "/audio?" + ts;
+            audioTTS.volume = volAlertas;
+            duckRadio(8000);
+            audioTTS.onended = () => {
+                audioTTS.onended = null;
+                // Pequena pausa entre mensagens encadeadas
+                setTimeout(processarFilaTTS, 300);
+            };
+            audioTTS.onerror = () => {
+                audioTTS.onerror = null;
+                setTimeout(processarFilaTTS, 300);
+            };
+            audioTTS.play().catch(() => setTimeout(processarFilaTTS, 300));
+        }
         let facingAtual  = "environment";
         let debugVisivel = false;
 
@@ -1067,11 +1093,8 @@
 
         function processarAlerta(data) {
             if (data.tipo === "tts") {
-                // TTS roda paralelo: só áudio, sem interferir no banner
-                audioTTS.src = "/audio?" + Date.now();
-                audioTTS.volume = volAlertas;
-                duckRadio(8000);
-                audioTTS.play();
+                // TTS entra na fila: aguarda o anterior terminar antes de tocar
+                enfileirarTTS(Date.now());
 
             } else if (data.tipo === "gift") {
                 enfileirarAlerta('gift', data.mensagem);
