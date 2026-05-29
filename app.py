@@ -136,38 +136,6 @@ def get_avatar_url(event, unique_id: str) -> str:
     return ''
 
 
-def monitorar_e_enviar_combo(usuario):
-    """Aguarda o tempo de espera terminar para verificar se o combo fechou,
-    e então envia um único agradecimento para a fila da IA."""
-    time.sleep(TEMPO_ESPERA_COMBO)
-
-    if usuario in combos_ativos:
-        dados = combos_ativos[usuario]
-        agora = time.time()
-
-        # Se já se passaram X segundos desde o ÚLTIMO presente enviado por ele, o combo fechou!
-        if agora - dados["ultimo_timestamp"] >= TEMPO_ESPERA_COMBO:
-            # Remove do dicionário de ativos para poder aceitar novos combos no futuro
-            combos_ativos.pop(usuario)
-
-            # Monta a frase baseada na quantidade
-            if dados["quantidade"] > 1:
-                mensagem_alerta = f"Obrigado pelo combo de {dados['quantidade']} {dados['presente']}s, {usuario}!"
-            else:
-                mensagem_alerta = f"Obrigado pelo {dados['presente']}, {usuario}!"
-
-            print(f"🎁 Combo Fechado! Enviando para a IA: {mensagem_alerta}")
-
-            # Envia para a fila do Kokoro com Prioridade 1 (Máxima)
-            fila_processamento_tts.put((1, mensagem_alerta))
-
-            # Alerta o HTML imediatamente para piscar o visual na tela (opcional)
-            push_alerta({
-                "tipo": "gift",
-                "reproduzir": True,
-                "mensagem": mensagem_alerta
-            })
-
 def filtrar_texto_para_kokoro(texto_original):
     """
     Remove todos os emojis de um texto usando a biblioteca 'emoji'.
@@ -237,15 +205,18 @@ async def on_like(event: LikeEvent):
             "mensagem": mensagem_likes
         })
 
+unico_print = True
+time_print = 0.0
+msg_actual = False
+
 @client.on(CommentEvent)
 async def on_comment(event: CommentEvent):
     global contador_ordem_chegada # Avisa o Python para usar a variável global
+    global unico_print, time_print, msg_actual
     nickname, usuario = get_nickname_and_username_from_raw(event)
     mensagem = event.comment
 
     # print(vars(event))
-
-    print(f"[{nickname}][@{usuario}]: {mensagem}")
 
     # try:
     #     raw = event.to_pydict(casing=betterproto.Casing.SNAKE)
@@ -253,23 +224,36 @@ async def on_comment(event: CommentEvent):
     # except Exception as e:
     #     print("Erro ao ler user_info:", e)
     # sys.exit(0)
-    chave_mensagem = f"{usuario}:{mensagem}"
-    if chave_mensagem in historico_mensagens_recentes:
-        return
+    if not unico_print and msg_actual:
+        print(f"[{nickname}][@{usuario}]: {mensagem}")
+        chave_mensagem = f"{usuario}:{mensagem}"
+        if chave_mensagem in historico_mensagens_recentes:
+            return
 
-    historico_mensagens_recentes.append(chave_mensagem)
-    if len(historico_mensagens_recentes) > 30:
-        historico_mensagens_recentes.pop(0)
+        historico_mensagens_recentes.append(chave_mensagem)
+        if len(historico_mensagens_recentes) > 30:
+            historico_mensagens_recentes.pop(0)
 
-    if len(mensagem) > caracters_coment:
-        mensagem = mensagem[:caracters_coment]
+        if len(mensagem) > caracters_coment:
+            mensagem = mensagem[:caracters_coment]
 
-    texto_para_ia = f"{nickname} disse: {mensagem}"
+        texto_para_ia = f"{nickname} disse: {mensagem}"
 
-    # INCREMENTA E ENVIAR COM O CONTADOR DE DESEMPATE
-    contador_ordem_chegada += 1
-    # A estrutura agora é: (Prioridade, Contador, Texto)
-    fila_processamento_tts.put((2, contador_ordem_chegada, texto_para_ia))
+        # INCREMENTA E ENVIAR COM O CONTADOR DE DESEMPATE
+        contador_ordem_chegada += 1
+        # A estrutura agora é: (Prioridade, Contador, Texto)
+        fila_processamento_tts.put((2, contador_ordem_chegada, texto_para_ia))
+    else:
+        if unico_print:
+            unico_print = False
+            time_print = time.time()
+            print('Mensagens pré carregadas que não serão enviadas ao kokoro')
+            print('---------------------------------------------------------')
+        if ((time.time() - time_print) <= 2):
+            print(f"[{time.time()}][{nickname}][@{usuario}]: {mensagem}")
+        else:
+            print('---------------------------------------------------------')
+            msg_actual = True
 
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
