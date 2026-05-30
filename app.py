@@ -457,7 +457,7 @@ def processador_de_audio():
             if TTS_ENGINE == 'voicerss':
                 sucesso = gerar_audio_voicerss(texto_para_ia)
             else:
-                subprocess.run(['python3', 'testar_voz.py', texto_para_ia, '-n', 'tts_live'], check=True)
+                subprocess.run(['python3', 'KokoroTts.py', texto_para_ia, '-n', 'tts_live'], check=True)
                 sucesso = True
 
             if sucesso:
