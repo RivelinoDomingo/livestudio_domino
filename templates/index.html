@@ -263,24 +263,31 @@
             width: 100%;
             height: 40px;
             z-index: 100;
-            display: flex;
-            align-items: stretch;
             font-family: 'Segoe UI', Arial, sans-serif;
-            overflow: hidden;
-        }
-
-        /* Metade esquerda e direita — trilha rolante */
-        .banner-half {
-            flex: 1;
-            overflow: hidden;
-            position: relative;
+            /* fundo único cobrindo toda a largura */
             background: linear-gradient(90deg, rgba(10,10,18,0.88), rgba(20,20,36,0.82));
             border-top: 1.5px solid rgba(0,179,126,0.45);
-            display: flex;
-            align-items: center;
+            overflow: hidden;        /* contém a trilha rolante */
         }
-        .banner-half::before,
-        .banner-half::after {
+
+        /* Trilha única que rola da direita para a esquerda */
+        #banner-scroll-track {
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+            height: 40px;
+            animation: banner-scroll 45s linear infinite;
+            will-change: transform;
+        }
+
+        @keyframes banner-scroll {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        /* Fade nas bordas laterais do banner */
+        #banner-classificacao::before,
+        #banner-classificacao::after {
             content: '';
             position: absolute;
             top: 0; bottom: 0;
@@ -288,29 +295,8 @@
             z-index: 2;
             pointer-events: none;
         }
-        #banner-left::before  { left: 0;  background: linear-gradient(to right, rgba(10,10,18,0.9), transparent); }
-        #banner-left::after   { right: 0; background: linear-gradient(to left,  rgba(10,10,18,0.9), transparent); }
-        #banner-right::before { left: 0;  background: linear-gradient(to right, rgba(10,10,18,0.9), transparent); }
-        #banner-right::after  { right: 0; background: linear-gradient(to left,  rgba(10,10,18,0.9), transparent); }
-
-        .banner-scroll-track {
-            display: inline-flex;
-            align-items: center;
-            white-space: nowrap;
-            animation: banner-scroll 45s linear infinite;
-            will-change: transform;
-        }
-        .banner-scroll-track:hover { animation-play-state: paused; }
-
-        /* Esquerda rola →←, direita rola ←→ para efeito espelhado */
-        #banner-right .banner-scroll-track {
-            animation-direction: reverse;
-        }
-
-        @keyframes banner-scroll {
-            0%   { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-        }
+        #banner-classificacao::before { left:  0; background: linear-gradient(to right, rgba(10,10,18,0.9), transparent); }
+        #banner-classificacao::after  { right: 0; background: linear-gradient(to left,  rgba(10,10,18,0.9), transparent); }
 
         /* Item individual */
         .bc-item {
@@ -348,27 +334,29 @@
             border-right: 1.5px solid rgba(0,179,126,0.3);
         }
 
-        /* Relógio central */
+        /* Relógio — sobreposto ao centro do banner, z-index acima da trilha */
         #banner-clock {
-            flex-shrink: 0;
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
             width: 90px;
+            height: 40px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.95);
             border-top: 1.5px solid #00b37e;
             border-left:  1px solid rgba(0,179,126,0.3);
             border-right: 1px solid rgba(0,179,126,0.3);
-            gap: 0px;
-            position: relative;
-            z-index: 5;
+            z-index: 10;   /* acima da trilha, texto passa por baixo */
+            pointer-events: none;
         }
         #clock-time {
             font-size: 17px;
             font-weight: 700;
             color: #00b37e;
-            letter-spacing: 0px;
             font-variant-numeric: tabular-nums;
             line-height: 1;
             font-family: 'Courier New', monospace;
@@ -569,25 +557,16 @@
         <!-- ── BANNER CLASSIFICAÇÃO ── -->
         <div id="banner-classificacao">
 
-            <!-- Metade esquerda -->
-            <div class="banner-half" id="banner-left">
-                <div class="banner-scroll-track" id="scroll-left">
-                    <span class="bc-item" style="color:#4a6070">⏳ carregando…</span>
-                </div>
+            <!-- Trilha única contínua — passa por baixo do relógio -->
+            <div id="banner-scroll-track">
+                <span class="bc-item" style="color:#4a6070">⏳ carregando…</span>
             </div>
 
-            <!-- Relógio central -->
+            <!-- Relógio sobreposto ao centro, z-index acima da trilha -->
             <div id="banner-clock">
                 <div id="clock-time">--:--</div>
                 <div id="clock-date">---</div>
                 <div id="clock-label">---</div>
-            </div>
-
-            <!-- Metade direita -->
-            <div class="banner-half" id="banner-right">
-                <div class="banner-scroll-track" id="scroll-right">
-                    <span class="bc-item" style="color:#4a6070">⏳ carregando…</span>
-                </div>
             </div>
 
         </div>
@@ -597,24 +576,23 @@
     <script>
         let audioTTS        = new Audio();
         let streamAtual     = null;
-        const filaTTS       = [];   // fila de timestamps de requisições de áudio TTS
+        const filaTTS       = [];   // fila de nomes de arquivo: "tts_<timestamp>.wav"
         let ttsRodando      = false;
 
-        function enfileirarTTS(timestamp) {
-            filaTTS.push(timestamp);
+        function enfileirarTTS(arquivo) {
+            filaTTS.push(arquivo);
             if (!ttsRodando) processarFilaTTS();
         }
 
         function processarFilaTTS() {
             if (filaTTS.length === 0) { ttsRodando = false; return; }
             ttsRodando = true;
-            const ts = filaTTS.shift();
-            audioTTS.src = "/audio?" + ts;
+            const arquivo = filaTTS.shift();
+            audioTTS.src = "/static/tts/" + arquivo;
             audioTTS.volume = volAlertas;
             duckRadio(8000);
             audioTTS.onended = () => {
                 audioTTS.onended = null;
-                // Pequena pausa entre mensagens encadeadas
                 setTimeout(processarFilaTTS, 300);
             };
             audioTTS.onerror = () => {
@@ -1093,8 +1071,8 @@
 
         function processarAlerta(data) {
             if (data.tipo === "tts") {
-                // TTS entra na fila: aguarda o anterior terminar antes de tocar
-                enfileirarTTS(Date.now());
+                // Cada alerta TTS carrega o nome do arquivo único gerado pelo servidor
+                if (data.arquivo) enfileirarTTS(data.arquivo);
 
             } else if (data.tipo === "gift") {
                 enfileirarAlerta('gift', data.mensagem);
@@ -1270,25 +1248,15 @@
                 const items = buildItems(ligas);
                 if (!items.length) return;
 
-                // Divide ao meio: primeira metade → left, segunda → right
-                const meio    = Math.ceil(items.length / 2);
-                const esq     = items.slice(0, meio);
-                const dir     = items.slice(meio);
+                // Duplica o conteúdo completo para loop contínuo suave
+                const html = items.join('');
+                const track = document.getElementById('banner-scroll-track');
+                track.innerHTML = html + html;
 
-                // Duplica cada metade para loop suave contínuo
-                const htmlEsq = esq.join('') + esq.join('');
-                const htmlDir = dir.length ? dir.join('') + dir.join('')
-                                           : esq.join('') + esq.join(''); // fallback: repete esquerda
-
-                document.getElementById('scroll-left').innerHTML  = htmlEsq;
-                document.getElementById('scroll-right').innerHTML = htmlDir;
-
-                // Ajusta velocidade por tamanho do conteúdo
+                // Velocidade proporcional ao total de jogadores
                 const totalPlayers = Object.values(ligas).flat().length;
                 const dur = Math.max(35, totalPlayers * 5);
-                document.querySelectorAll('.banner-scroll-track').forEach(el => {
-                    el.style.animationDuration = dur + 's';
-                });
+                track.style.animationDuration = dur + 's';
             }
 
             async function atualizar() {

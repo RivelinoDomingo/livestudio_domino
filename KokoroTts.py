@@ -7,6 +7,7 @@ from kokoro_onnx import Kokoro
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Converte texo em voz')
     parser.add_argument('texto', help='Texto a ser falado.')
+    parser.add_argument('-n','--name', default='tts', help='Nome do arquivo final.')
     parser.add_argument('-m', '--modelo', action='store_true', help='Muda para modelo menor int8 82M.')
     parser.add_argument('-d', '--debug', action='store_true', help='Ativa modo depuração')
     return parser.parse_args()
@@ -40,9 +41,9 @@ samples, sample_rate = kokoro.create(
 )
 
 # Salva o resultado
-nome_arquivo = "resultado.wav"
+nome_arquivo = f"{parse_arguments().name}.wav"
 sf.write(nome_arquivo, samples, sample_rate)
 if parse_arguments().debug:
-    print(f"Usando modelo {onnx_file} | com duração de {(time.time() - start_at):.1f} segundos")
+    print(f"Arquivo [{nome_arquivo}] gerado usando modelo {onnx_file} | {len(texto)} Caracteres.. tempo gasto de {(time.time() - start_at):.1f} segundos")
 # print(f"Sucesso! Áudio gravado com sucesso em: {nome_arquivo}")
 

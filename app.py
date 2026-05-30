@@ -47,7 +47,39 @@ client = TikTokLiveClient(unique_id=TIKTOK_USERNAME)
 
 # sys.exit(0)
 
-AUDIO_FILE = "resultado.wav"
+AUDIO_FILE  = "tts_live.wav"
+TTS_DIR     = os.path.join('static', 'tts')   # pasta onde ficam os WAVs nomeados
+
+def setup_tts_dir():
+    """Cria a pasta static/tts e remove todos os WAVs de sessões anteriores."""
+    os.makedirs(TTS_DIR, exist_ok=True)
+    removidos = 0
+    for f in os.listdir(TTS_DIR):
+        if f.startswith('tts_') and f.endswith('.wav'):
+            try:
+                os.remove(os.path.join(TTS_DIR, f))
+                removidos += 1
+            except Exception:
+                pass
+    if removidos:
+        print(f"🗑️  {removidos} áudio(s) TTS antigo(s) removido(s) da sessão anterior.")
+
+def limpar_tts_antigos():
+    """Remove WAVs com mais de 60 segundos de existência. Roda em loop numa thread."""
+    while True:
+        time.sleep(30)
+        agora = time.time()
+        try:
+            for f in os.listdir(TTS_DIR):
+                if f.startswith('tts_') and f.endswith('.wav'):
+                    caminho = os.path.join(TTS_DIR, f)
+                    try:
+                        if agora - os.path.getmtime(caminho) > 60:
+                            os.remove(caminho)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
 AVATARES_DIR = os.path.join('static', 'avatares')
 cache_avatares = {}  # { unique_id: "/static/avatares/avt_<id>.webp" }
@@ -69,6 +101,9 @@ likes_meme = 200
 caracters_nick = 20
 caracters_coment = 500
 online = False
+unico_print = True
+time_print = 0.0
+msg_actual = False
 
 # Lista de alertas com ID sequencial global.
 # Clientes enviam seu ultimo_id e recebem apenas alertas mais novos.
@@ -217,10 +252,6 @@ async def on_like(event: LikeEvent):
             "mensagem": mensagem_likes
         })
 
-unico_print = True
-time_print = time.time()
-msg_actual = False
-
 @client.on(CommentEvent)
 async def on_comment(event: CommentEvent):
     global contador_ordem_chegada # Avisa o Python para usar a variável global
@@ -241,12 +272,14 @@ async def on_comment(event: CommentEvent):
         unico_print = False
         time_print = time.time()
         print('Mensagens pré carregadas que não serão enviadas ao kokoro')
-        print('---------------------------------------------------------')
-    if ((time.time() - time_print) <= 4):
+        print('---------------------------------------------------------\n')
+        print(f"[{time.time()}][{nickname}][@{usuario}]: {mensagem}")
+    elif ((time.time() - time_print) <= 4):
         print(f"[{time.time()}][{nickname}][@{usuario}]: {mensagem}")
     else:
-        print('---------------------------------------------------------\n')
-        msg_actual = True
+        if not msg_actual:
+            print('---------------------------------------------------------\n')
+            msg_actual = True
 
 
     if msg_actual:
@@ -268,7 +301,6 @@ async def on_comment(event: CommentEvent):
         contador_ordem_chegada += 1
         # A estrutura agora é: (Prioridade, Contador, Texto)
         fila_processamento_tts.put((2, contador_ordem_chegada, texto_para_ia))
-
 
 @client.on(GiftEvent)
 async def on_gift(event: GiftEvent):
@@ -425,12 +457,23 @@ def processador_de_audio():
             if TTS_ENGINE == 'voicerss':
                 sucesso = gerar_audio_voicerss(texto_para_ia)
             else:
-                subprocess.run(['python3', 'testar_voz.py', texto_para_ia], check=True)
+                subprocess.run(['python3', 'testar_voz.py', texto_para_ia, '-n', 'tts_live'], check=True)
                 sucesso = True
 
             if sucesso:
-                push_alerta({"tipo": "tts", "reproduzir": True})
-                print(f"✅ [{engine_label}] Áudio pronto em {time.time() - tempo_start:.2f}s — enviado ao navegador!\n")
+                # Move resultado.wav para static/tts/tts_<timestamp>.wav
+                ts      = int(time.time() * 1000)
+                nome    = f"tts_live_{ts}.wav"
+                destino = os.path.join(TTS_DIR, nome)
+                try:
+                    os.replace(AUDIO_FILE, destino)
+                except Exception as e:
+                    print(f"⚠️ Não foi possível mover o áudio: {e}")
+                    nome = None
+
+                if nome:
+                    push_alerta({"tipo": "tts", "reproduzir": True, "arquivo": nome})
+                    print(f"✅ [{engine_label}] Áudio pronto em {time.time() - tempo_start:.2f}s — enviado ao navegador!\n")
             else:
                 print(f"⚠️ [{engine_label}] Falha na geração de áudio — alerta TTS ignorado.")
 
@@ -585,15 +628,22 @@ signal.signal(signal.SIGINT, encerrar_sistema_graciosamente)
 
 if __name__ == '__main__':
 
-    # 1. Thread 1: Escuta o TikTok
+    # 0. Prepara a pasta de áudios TTS (cria e limpa sessão anterior)
+    setup_tts_dir()
+
+    # 1. Thread de limpeza automática de WAVs antigos (a cada 30s, remove >1min)
+    thread_limpeza = threading.Thread(target=limpar_tts_antigos, daemon=True)
+    thread_limpeza.start()
+
+    # 2. Thread: Escuta o TikTok
     thread_tiktok = threading.Thread(target=rodar_tiktok, daemon=True)
     thread_tiktok.start()
 
-    # 2. Thread 2: Processa o áudio de forma isolada
+    # 3. Thread: Processa o áudio de forma isolada
     thread_audio = threading.Thread(target=processador_de_audio, daemon=True)
     thread_audio.start()
 
-    # 3. Inicia o Flask
+    # 4. Inicia o Flask
     engine_info = f"VoiceRSS (voz: Denis, pt-br)" if TTS_ENGINE == 'voicerss' else "Kokoro (local)"
     print(f"🚀 Servidor da Live iniciado em https://localhost:5000")
     print(f"🎤 Engine de TTS: {engine_info}")
