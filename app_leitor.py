@@ -6,7 +6,7 @@ from flask import Flask, render_template_string, request, jsonify, send_from_dir
 app = Flask(__name__)
 
 # Caminho para o arquivo de áudio gerado
-AUDIO_FILE = "resultado.wav"
+AUDIO_FILE = "tts.wav"
 
 tempo_total = 0
 
@@ -156,7 +156,7 @@ def falar():
         # Executa o seu arquivo testar_voz.py passando o texto recebido como argumento
         # Usamos o python3 do próprio ambiente virtual
         resultado = subprocess.run(
-            ['python3', 'testar_voz.py', texto],
+            ['python3', 'KokoroTts.py', texto],
             capture_output=True, text=True, check=True
         )
 

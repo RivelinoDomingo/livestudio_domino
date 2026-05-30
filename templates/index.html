@@ -1233,7 +1233,7 @@
                         const aprov = p.aproveitamento.toFixed(1);
                         items.push(
                             `<span class="bc-item">
-                                <span class="bc-serie" style="background:${cor}22;color:${cor};border:1px solid ${cor}44">${serie}</span>
+                                <span class="bc-serie" style="background:${cor}22;color:${cor};border:1px solid ${cor}44"</span>
                                 <span class="bc-pos" style="color:${cor}">${pos_f}</span>
                                 <span class="bc-name">${p.name}</span>
                                 <span class="bc-stat"><b>${aprov}%</b> · ⚡<b>${p.raios}</b> · 🛵<b>${p.lambretas}</b></span>
@@ -1282,9 +1282,9 @@
         window.onload = () => {
             atualizarDebugViewport();
             iniciarCamera();
-            setInterval(puxarDadosFirebase,   4000);
+            setInterval(puxarDadosFirebase,   5000);
             setInterval(checarNovosAlertas,   1000);
-            setInterval(checarStatusOnline,   1000);
+            setInterval(checarStatusOnline,   5000);
         };
     </script>
 </body>
